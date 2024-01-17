@@ -15,35 +15,79 @@ BEGIN
 			EXECUTE('SELECT * FROM '+@Tabla);
 		END
 		ELSE BEGIN 
-			DECLARE @Consulta NVARCHAR(MAX) = 'SELECT * FROM '+@Tabla+' AS tabla_1 ';
+			DECLARE @Indice INT = 1;
+			DECLARE @Maximo INT = (
+				SELECT COUNT(*)
+				FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
+					INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+						ON K.COLUMN_NAME = C.COLUMN_NAME
+				WHERE k.TABLE_NAME = @Tabla AND c.TABLE_NAME = @Tabla
+			);
 
-			SELECT @Consulta += ' INNER JOIN ' +
-				(CASE
-					WHEN @Tabla = 'compra' AND TC.CONSTRAINT_NAME LIKE '%metodoPagoId' THEN 'metodoPago AS tabla_2'
-					WHEN @Tabla = 'compra' AND TC.CONSTRAINT_NAME LIKE '%usuarioPerfil_id' THEN 'usuarioPerfil AS tabla_3' 
+			DECLARE @Consulta NVARCHAR(MAX) = 'SELECT * FROM '+@Tabla;
 
-					WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%calendarioId' THEN 'calendario AS tabla_2'
-					WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%modeloAutoId' THEN 'modeloAuto AS tabla_3'
-					WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%pruebaManejoId' THEN 'pruebaManejo AS tabla_4'
-					WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%usuarioPerfil_id' THEN 'UsuarioPerfil AS tabla_5'
-				END) + ' ON ' + 'tabla_1.' + KCU.COLUMN_NAME + ' = ' + (
-					CASE 
-						WHEN @Tabla = 'compra' AND TC.CONSTRAINT_NAME LIKE '%metodoPagoId' THEN 'tabla_2.Metodopago_id'
-						WHEN @Tabla = 'compra' AND TC.CONSTRAINT_NAME LIKE '%usuarioPerfilId' THEN 'tabla_3.usuarioPerfil_id'
+			WHILE @Indice <= @Maximo BEGIN 
+				DECLARE @pk_name NVARCHAR(MAX) = '';
+				DECLARE @nombre_columna NVARCHAR(MAX) = '';
+				SELECT TOP 1 @pk_name = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@Tabla+'_', ''), @nombre_columna = K.COLUMN_NAME
+				FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
+					INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+						ON K.COLUMN_NAME = C.COLUMN_NAME
+				WHERE K.TABLE_NAME = @Tabla AND C.TABLE_NAME = @Tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Indice;
 
-						WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%calendarioId' THEN 'tabla_2.calendario_id'
-						WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%modeloAutoId' THEN 'tabla_3.modeloAuto_id'
-						WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%pruebaManejoId' THEN 'tabla_4.pruebaManejo_id'
-						WHEN @Tabla = 'reserva' AND TC.CONSTRAINT_NAME LIKE '%usuarioPerfil_id' THEN 'tabla_5.usuarioPerfil_id'
-					END
-				)
-			FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS TC
-				INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU
-					ON TC.CONSTRAINT_NAME = KCU.CONSTRAINT_NAME
-			WHERE TC.TABLE_NAME = @Tabla AND TC.CONSTRAINT_TYPE = 'FOREIGN KEY';
-		
-			EXECUTE(@Consulta);
+				IF @pk_name != '' AND @nombre_columna != '' BEGIN 
+					SET @pk_name = REPLACE(@pk_name, '_'+@nombre_columna, '');
+					SET @pk_name = 'PK_'+@pk_name;
+
+					DECLARE @flag INT = 0;
+
+					SELECT @Consulta +=
+						CASE
+							WHEN COUNT(CTU.TABLE_NAME) = 1 THEN 		
+								' INNER JOIN ' + CTU.TABLE_NAME + ' ON ' + @Tabla + '.' + @nombre_columna + ' = ' + CTU.TABLE_NAME + '.' + KCU.COLUMN_NAME + ' '
+							ELSE 
+								SET @flag = 1;
+						END
+					FROM INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE AS CTU 
+						INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU
+							ON CTU.TABLE_NAME = KCU.TABLE_NAME
+					WHERE CTU.CONSTRAINT_NAME = @pk_name
+					GROUP BY CTU.TABLE_NAME, KCU.COLUMN_NAME;
+
+
+					IF (@flag = 1) BEGIN
+						seguimos alimentando la consulta.
+						WHILE @Indice2 <= COUNT(CTU.TABLE_NAME) BEGIN
+
+							SELECT TOP 1 @pk_name = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@CTU_TABLE_NAME+'_', ''), @nombre_columna2 = K.COLUMN_NAME
+							FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
+								INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+									ON K.COLUMN_NAME = C.COLUMN_NAME
+							WHERE K.TABLE_NAME = @CTU_TABLE_NAME AND C.TABLE_NAME = @CTU_TABLE_NAME AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Indice2;
+
+							IF(@nombre_columna2 != '') BEGIN 
+								SET @pk_name = REPLACE(@pk_name, '_'+@nombre_columna2, '');
+								SET @pk_name = 'PK_'+@pk_name;
+							
+								SELECT ' INNER JOIN ' + CTU2.TABLE_NAME + ' ON ' + CTU2.TABLE_NAME + '.' + CTU2.COLUMN_NAME + ' = ' + @CTU_TABLE_NAME + '.' + @CTU_COLUMN_NAME
+								FROM INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE AS CTU2 
+									INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU2
+										ON CTU2.TABLE_NAME = KCU2.TABLE_NAME
+								WHERE CTU2.CONSTRAINT_NAME = @pk_name;
+
+							END
+							
+							SET @Indice2 += 1
+						END
+					END 
+						
+				END
+				SET @Indice += 1;
+			END
+
+			PRINT @Consulta;
 		END
+
 	END TRY
 	BEGIN CATCH
 		SELECT 'error', ERROR_MESSAGE();
@@ -51,14 +95,14 @@ BEGIN
 END
 
 
-
-
 EXECUTE ListarPTabla @Tabla = 'reserva';
 
-GO
+SELECT K.COLUMN_NAME, C.ORDINAL_POSITION, K.CONSTRAINT_NAME
+FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
+	INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+		ON K.COLUMN_NAME = C.COLUMN_NAME
+WHERE k.TABLE_NAME = 'reserva' AND c.TABLE_NAME = 'reserva';
 
-SELECT * FROM INFORMATION_SCHEMA.COLUMN_DOMAIN_USAGE;
-SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE;
 
 DROP PROCEDURE ListarPTabla;
 
