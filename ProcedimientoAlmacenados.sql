@@ -29,6 +29,7 @@ BEGIN
 			WHILE @Indice <= @Maximo BEGIN 
 				DECLARE @pk_name NVARCHAR(MAX) = '';
 				DECLARE @nombre_columna NVARCHAR(MAX) = '';
+
 				SELECT TOP 1 @pk_name = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@Tabla+'_', ''), @nombre_columna = K.COLUMN_NAME
 				FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
 					INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
@@ -39,49 +40,14 @@ BEGIN
 					SET @pk_name = REPLACE(@pk_name, '_'+@nombre_columna, '');
 					SET @pk_name = 'PK_'+@pk_name;
 
-					DECLARE @flag INT = 0;
-
-					SELECT @Consulta +=
-						CASE
-							WHEN COUNT(CTU.TABLE_NAME) = 1 THEN 		
-								' INNER JOIN ' + CTU.TABLE_NAME + ' ON ' + @Tabla + '.' + @nombre_columna + ' = ' + CTU.TABLE_NAME + '.' + KCU.COLUMN_NAME + ' '
-							ELSE 
-								SET @flag = 1;
-						END
+					SELECT @Consulta += ' INNER JOIN ' + CTU.TABLE_NAME + ' ON ' + @Tabla + '.' + @nombre_columna + ' = ' + CTU.TABLE_NAME + '.' + KCU.COLUMN_NAME + ' '
 					FROM INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE AS CTU 
 						INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU
 							ON CTU.TABLE_NAME = KCU.TABLE_NAME
-					WHERE CTU.CONSTRAINT_NAME = @pk_name
-					GROUP BY CTU.TABLE_NAME, KCU.COLUMN_NAME;
+					WHERE CTU.CONSTRAINT_NAME = @pk_name AND KCU.CONSTRAINT_NAME LIKE '%PK%';
 
-
-					IF (@flag = 1) BEGIN
-						seguimos alimentando la consulta.
-						WHILE @Indice2 <= COUNT(CTU.TABLE_NAME) BEGIN
-
-							SELECT TOP 1 @pk_name = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@CTU_TABLE_NAME+'_', ''), @nombre_columna2 = K.COLUMN_NAME
-							FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
-								INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
-									ON K.COLUMN_NAME = C.COLUMN_NAME
-							WHERE K.TABLE_NAME = @CTU_TABLE_NAME AND C.TABLE_NAME = @CTU_TABLE_NAME AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Indice2;
-
-							IF(@nombre_columna2 != '') BEGIN 
-								SET @pk_name = REPLACE(@pk_name, '_'+@nombre_columna2, '');
-								SET @pk_name = 'PK_'+@pk_name;
-							
-								SELECT ' INNER JOIN ' + CTU2.TABLE_NAME + ' ON ' + CTU2.TABLE_NAME + '.' + CTU2.COLUMN_NAME + ' = ' + @CTU_TABLE_NAME + '.' + @CTU_COLUMN_NAME
-								FROM INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE AS CTU2 
-									INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU2
-										ON CTU2.TABLE_NAME = KCU2.TABLE_NAME
-								WHERE CTU2.CONSTRAINT_NAME = @pk_name;
-
-							END
-							
-							SET @Indice2 += 1
-						END
-					END 
-						
 				END
+
 				SET @Indice += 1;
 			END
 
@@ -97,12 +63,24 @@ END
 
 EXECUTE ListarPTabla @Tabla = 'reserva';
 
-SELECT K.COLUMN_NAME, C.ORDINAL_POSITION, K.CONSTRAINT_NAME
-FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
-	INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
-		ON K.COLUMN_NAME = C.COLUMN_NAME
-WHERE k.TABLE_NAME = 'reserva' AND c.TABLE_NAME = 'reserva';
+Go
 
+ALTER FUNCTION ObtenerPK(@CONSTRAINT_NAME NVARCHAR(MAX), @TABLA NVARCHAR(MAX), @Indice INT)
+	RETURNS NVARCHAR(MAX)
+AS 
+BEGIN 
+	DECLARE @pk_name NVARCHAR(MAX);
+	
+	SELECT TOP 1 @pk_name = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@Tabla+'_', ''), @nombre_columna = K.COLUMN_NAME
+	FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
+		INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+			ON K.COLUMN_NAME = C.COLUMN_NAME
+	WHERE K.TABLE_NAME = @Tabla AND C.TABLE_NAME = @Tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Indice;
+
+	RETURN 'okey';
+END
+
+Go
 
 DROP PROCEDURE ListarPTabla;
 
