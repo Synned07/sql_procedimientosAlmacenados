@@ -61,6 +61,7 @@ BEGIN
 END
 
 
+
 EXECUTE ListarPTabla @Tabla = 'reserva';
 
 Go
