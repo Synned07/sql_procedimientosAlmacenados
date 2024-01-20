@@ -10,100 +10,113 @@ BEGIN
 		DECLARE @NumeroLlaves INT;
 		DECLARE @Columnas NVARCHAR(MAX);
 
+		-- con este verifico cuantas claves FK tiene una tabla en general
 		SELECT @NumeroLlaves = COUNT(COLUMN_NAME) 
 		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
 		WHERE TABLE_NAME = @Tabla;
 
-		
-
 		IF @NumeroLlaves = 1
 		BEGIN 
-			EXECUTE('SELECT * FROM '+@Tabla);
+			DECLARE @sql NVARCHAR(MAX) = 'SELECT * FROM ' + @Tabla;
+
+			IF @campo != '' AND @valor != '' 
+			BEGIN 
+				SET @sql += ' WHERE ' + @campo + ' = ' + @valor;
+			END
+
+			EXECUTE(@sql);
 		END
 		ELSE IF @NumeroLlaves > 1
 		BEGIN
-			IF(LOWER(@Tabla) = 'reserva') BEGIN SET @Columnas = 'reserva_id, calendario_asunto, Fecha, Hora, nombre, apellido, cedula, celular, correo, nombre_rol, estado, Color, Marca, YearAntiguedad, pruebaManejo_descripcion, pruebaManejo_estado, pruebaManejo_nivelSatisfaccion';  END 
-			IF(LOWER(@Tabla) = 'usuarioperfil') BEGIN SET @Columnas = 'nombre, apellido, cedula, celular, correo, contrasena, nombre_rol, estado';  END 
+			BEGIN TRY 
+				IF(LOWER(@Tabla) = 'reserva') BEGIN SET @Columnas = 'reserva_id, calendario_asunto, Fecha, Hora, nombre, apellido, cedula, celular, correo, nombre_rol, estado, Color, Marca, YearAntiguedad, pruebaManejo_descripcion, pruebaManejo_estado, pruebaManejo_nivelSatisfaccion';  END 
+				IF(LOWER(@Tabla) = 'usuarioperfil') BEGIN SET @Columnas = 'nombre, apellido, cedula, celular, correo, contrasena, nombre_rol, estado';  END 
 
-			DECLARE @Consulta NVARCHAR(MAX) = 'SELECT ' + @Columnas + ' FROM '+@Tabla;
+				DECLARE @Consulta NVARCHAR(MAX) = 'SELECT ' + @Columnas + ' FROM '+@Tabla;
 
-			DECLARE @EXIT INT = 1;
+				DECLARE @EXIT INT = 1;
 
-			WHILE @EXIT = 1 BEGIN 
-			
-				DECLARE @Indice INT = 1;
-				DECLARE @Maximo INT = (
-					SELECT COUNT(*)
-					FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
-						INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
-							ON K.COLUMN_NAME = C.COLUMN_NAME
-					WHERE k.TABLE_NAME = @Tabla AND c.TABLE_NAME = @Tabla
-				);
+				WHILE @EXIT = 1 BEGIN 
+				
+					DECLARE @Indice INT = 1;
+					DECLARE @Maximo INT = (
+						SELECT COUNT(*)
+						FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
+							INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+								ON K.COLUMN_NAME = C.COLUMN_NAME
+						WHERE k.TABLE_NAME = @Tabla AND c.TABLE_NAME = @Tabla
+					);
 
-				DECLARE @verificarTabla NVARCHAR(MAX);
+					DECLARE @verificarTabla NVARCHAR(MAX);
 
-				WHILE @Indice <= @Maximo 
-				BEGIN 
-					DECLARE @pk_name NVARCHAR(MAX) = '';
-					DECLARE @nombre_columna NVARCHAR(MAX) = '';
+					WHILE @Indice <= @Maximo 
+					BEGIN 
+						DECLARE @pk_name NVARCHAR(MAX) = '';
+						DECLARE @nombre_columna NVARCHAR(MAX) = '';
 
-					SELECT TOP 1 @pk_name = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@Tabla+'_', ''), @nombre_columna = K.COLUMN_NAME
-					FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
-						INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
-							ON K.COLUMN_NAME = C.COLUMN_NAME
-					WHERE K.TABLE_NAME = @Tabla AND C.TABLE_NAME = @Tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Indice;
+						SELECT TOP 1 @pk_name = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@Tabla+'_', ''), @nombre_columna = K.COLUMN_NAME
+						FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
+							INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+								ON K.COLUMN_NAME = C.COLUMN_NAME
+						WHERE K.TABLE_NAME = @Tabla AND C.TABLE_NAME = @Tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Indice;
 
-					IF @pk_name != '' AND @nombre_columna != '' BEGIN 
-						SET @pk_name = REPLACE(@pk_name, '_'+@nombre_columna, '');
-						SET @pk_name = 'PK_'+@pk_name;
+						IF @pk_name != '' AND @nombre_columna != '' BEGIN 
+							SET @pk_name = REPLACE(@pk_name, '_'+@nombre_columna, '');
+							SET @pk_name = 'PK_'+@pk_name;
 
-						
-						SELECT @Consulta += ' INNER JOIN ' + CTU.TABLE_NAME + ' ON ' + @Tabla + '.' + @nombre_columna + ' = ' + CTU.TABLE_NAME + '.' + KCU.COLUMN_NAME + ' ', 
-								@verificarTabla = (
-									SELECT 
-										CASE
-											WHEN COUNT(x.TABLE_NAME) != 1 THEN x.TABLE_NAME
-											ELSE 
-												'ninguno'
-										END
-									FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS x
-									WHERE x.TABLE_NAME = CTU.TABLE_NAME
-									GROUP BY x.TABLE_NAME
-								) 
-						FROM INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE AS CTU 
-							INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU
-								ON CTU.TABLE_NAME = KCU.TABLE_NAME
-						WHERE CTU.CONSTRAINT_NAME = @pk_name AND KCU.CONSTRAINT_NAME LIKE '%PK%';
+							
+							SELECT @Consulta += ' INNER JOIN ' + CTU.TABLE_NAME + ' ON ' + @Tabla + '.' + @nombre_columna + ' = ' + CTU.TABLE_NAME + '.' + KCU.COLUMN_NAME + ' ', 
+									@verificarTabla = (
+										SELECT 
+											CASE
+												WHEN COUNT(x.TABLE_NAME) != 1 THEN x.TABLE_NAME
+												ELSE 
+													'ninguno'
+											END
+										FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS x
+										WHERE x.TABLE_NAME = CTU.TABLE_NAME
+										GROUP BY x.TABLE_NAME
+									) 
+							FROM INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE AS CTU 
+								INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KCU
+									ON CTU.TABLE_NAME = KCU.TABLE_NAME
+							WHERE CTU.CONSTRAINT_NAME = @pk_name AND KCU.CONSTRAINT_NAME LIKE '%PK%';
 
+						END
+
+						SET @Indice += 1  
+					END			
+
+					IF (@Indice-1) = @Maximo AND @verificarTabla != 'ninguno' BEGIN 
+						SET @Tabla = @verificarTabla;
 					END
-
-					SET @Indice += 1  
-				END			
-
-				IF (@Indice-1) = @Maximo AND @verificarTabla != 'ninguno' BEGIN 
-					SET @Tabla = @verificarTabla;
+					ELSE BEGIN 
+						SET @EXIT = 0;
+					END
 				END
-				ELSE BEGIN 
-					SET @EXIT = 0;
-				END
-			END
 
-			--clausula (filtrador)
-			IF @campo != '' AND @valor != '' BEGIN 
-				SET @Consulta += ' WHERE ' + @campo + ' = ' + @valor;
-			END 
+				--clausula (filtrador)
+				IF @campo != '' AND @valor != '' BEGIN 
+					SET @Consulta += ' WHERE ' + @campo + ' = ' + @valor;
+				END 
 
-			EXECUTE(@Consulta);
+				EXECUTE(@Consulta);
+			END TRY 
+			BEGIN CATCH 
+				RAISERROR('error', 16, 1);
+			END CATCH 
 
 		END
 		ELSE BEGIN 
-			SELECT 'error';
+			RAISERROR('error', 16, 1);
 		END
 	END TRY
 	BEGIN CATCH
-		SELECT 'error', ERROR_MESSAGE();
+		THROW 50001, 'error', 1;
 	END CATCH
 END
+
+
 
 EXECUTE ListarPTabla @Tabla = 'reserva';
 
@@ -126,7 +139,7 @@ BEGIN
 		SELECT 'ok';
 	END TRY
 	BEGIN CATCH
-		SELECT 'error', ERROR_MESSAGE();
+		SELECT ERROR_MESSAGE();
 	END CATCH
 END
 
@@ -140,44 +153,48 @@ EXECUTE CrearPTabla
 
 DROP PROCEDURE CrearPTabla;
 GO
+
+
 --Procedimiento almacenados Padre para Eliminar
 ALTER PROCEDURE EliminarPTabla
-	@Tabla NVARCHAR(80) = '',
-	@key NVARCHAR(80) = '',
-	@Id INT = 0
+	@Tabla NVARCHAR(MAX) = '',
+	@key NVARCHAR(MAX) = '',
+	@value NVARCHAR(MAX) = ''
 AS
 BEGIN
+	BEGIN TRY 
+		DECLARE @procedimiento NVARCHAR(MAX) = N'exec ListarPTabla @Tabla = '+ @Tabla + ', @campo = ' + @key + ', @valor = ' + @value;
+		EXECUTE(@procedimiento);
 
-	BEGIN TRY
-		IF (NOT @Tabla = '') AND (NOT @key = '') AND (NOT @Id = 0) BEGIN
+		IF (NOT @Tabla = '') AND (NOT @key = '') AND (NOT @value = '') BEGIN
 			DECLARE @CMD NVARCHAR(MAX) = 'DELETE FROM';
 			SET @CMD += ' ' + @Tabla;
 			SET @CMD += ' ' + 'WHERE';
 			SET @CMD += ' ' + @key;
-			SET @CMD += ' = ' + CAST(@Id AS NVARCHAR(MAX));
+			SET @CMD += ' = ' + @value;
 
-			EXECUTE(@CMD);
-
-			SELECT 'ok';
+			-- PRINT @CMD;
+			-- EXECUTE(@CMD);
+			SELECT @procedimiento;
 		END
 		ELSE BEGIN 
 			SELECT 'error';
 		END
-	END TRY
-
-	BEGIN CATCH
-		SELECT 'error', ERROR_MESSAGE();
-	END CATCH
+	END TRY 
+	BEGIN CATCH 
+		PRINT 'error';
+	END CATCH 
 END
 
 EXEC EliminarPTabla 
 				@Tabla = 'usuario', 
-				@Key = 'usuario_id', 
-				@Id = 44;
+				@Key = 'cedula', 
+				@value = '8888888887';
 
 
-INSERT INTO reserva(modeloAutoId, calendarioId, pruebaManejoId, usuarioPerfil_id)
-	VALUES(10, 3, 4, 11);
+SELECT LEN(u.nombre),u.nombre, u.apellido, u.cedula, u.celular, u.correo 
+FROM usuario as u
+WHERE u.cedula = '8888888888' and LEN(u.nombre) != 0;
 
 GO
 
