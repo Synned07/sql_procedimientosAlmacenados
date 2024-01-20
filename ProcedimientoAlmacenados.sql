@@ -1,6 +1,8 @@
 --Procedimiento almacenados Padre para Listar
 ALTER PROCEDURE ListarPTabla
-	@Tabla NVARCHAR(MAX)
+	@Tabla NVARCHAR(MAX),
+	@campo NVARCHAR(MAX) = '',
+	@valor NVARCHAR(MAX) = ''
 AS
 BEGIN
 	BEGIN TRY
@@ -12,13 +14,15 @@ BEGIN
 		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
 		WHERE TABLE_NAME = @Tabla;
 
-		IF(@NumeroLlaves = 1)
+		
+
+		IF @NumeroLlaves = 1
 		BEGIN 
 			EXECUTE('SELECT * FROM '+@Tabla);
 		END
-		ELSE 
+		ELSE IF @NumeroLlaves > 1
 		BEGIN
-			IF(LOWER(@Tabla) = 'reserva') BEGIN SET @Columnas = 'calendario_asunto, Fecha, Hora, nombre, apellido, cedula, celular, correo, nombre_rol, estado, Color, Marca, YearAntiguedad, pruebaManejo_descripcion, pruebaManejo_estado, pruebaManejo_nivelSatisfaccion';  END 
+			IF(LOWER(@Tabla) = 'reserva') BEGIN SET @Columnas = 'reserva_id, calendario_asunto, Fecha, Hora, nombre, apellido, cedula, celular, correo, nombre_rol, estado, Color, Marca, YearAntiguedad, pruebaManejo_descripcion, pruebaManejo_estado, pruebaManejo_nivelSatisfaccion';  END 
 			IF(LOWER(@Tabla) = 'usuarioperfil') BEGIN SET @Columnas = 'nombre, apellido, cedula, celular, correo, contrasena, nombre_rol, estado';  END 
 
 			DECLARE @Consulta NVARCHAR(MAX) = 'SELECT ' + @Columnas + ' FROM '+@Tabla;
@@ -84,8 +88,16 @@ BEGIN
 				END
 			END
 
+			--clausula (filtrador)
+			IF @campo != '' AND @valor != '' BEGIN 
+				SET @Consulta += ' WHERE ' + @campo + ' = ' + @valor;
+			END 
 
 			EXECUTE(@Consulta);
+
+		END
+		ELSE BEGIN 
+			SELECT 'error';
 		END
 	END TRY
 	BEGIN CATCH
@@ -93,7 +105,7 @@ BEGIN
 	END CATCH
 END
 
-EXECUTE ListarPTabla @Tabla = 'reservas';
+EXECUTE ListarPTabla @Tabla = 'reserva';
 
 GO
 
@@ -112,8 +124,6 @@ BEGIN
 
 		EXECUTE( @SQL );
 		SELECT 'ok';
-	
-		-- PRINT @SQL;
 	END TRY
 	BEGIN CATCH
 		SELECT 'error', ERROR_MESSAGE();
@@ -126,9 +136,6 @@ EXECUTE CrearPTabla
 				@NumeroCampos = 4, 
 				@Esquema = 'modeloAutoId, calendarioid, pruebaManejoId, usuarioPerfil_id',  
 				@Registros = '10, 59, 46, 35';
-
-EXECUTE ListarPTabla @Columnas = '*',
-						@Tabla = 'calendario';
 
 
 DROP PROCEDURE CrearPTabla;
