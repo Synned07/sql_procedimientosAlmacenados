@@ -29,10 +29,12 @@ BEGIN
 		ELSE IF @NumeroLlaves > 1
 		BEGIN
 			BEGIN TRY 
-				IF(LOWER(@Tabla) = 'reserva') BEGIN SET @Columnas = 'reserva_id, calendario_asunto, Fecha, Hora, nombre, apellido, cedula, celular, correo, nombre_rol, estado, Color, Marca, YearAntiguedad, pruebaManejo_descripcion, pruebaManejo_estado, pruebaManejo_nivelSatisfaccion';  END 
-				IF(LOWER(@Tabla) = 'usuarioperfil') BEGIN SET @Columnas = 'nombre, apellido, cedula, celular, correo, contrasena, nombre_rol, estado';  END 
+				-- comprobacion antes de realizar la construccion de la consulta.
+				IF(@Tabla = 'reserva') BEGIN SET @Columnas = 'reserva_id, calendario_asunto, Fecha, Hora, nombre, apellido, cedula, celular, correo, nombre_rol, estado, Color, Marca, YearAntiguedad, pruebaManejo_descripcion, pruebaManejo_estado, pruebaManejo_nivelSatisfaccion';  END 
+				IF(@Tabla = 'usuarioperfil') BEGIN SET @Columnas = 'nombre, apellido, cedula, celular, correo, contrasena, nombre_rol, estado';  END 
+				IF(@Tabla = 'compra') BEGIN SET @Columnas = '*';  END
 
-				DECLARE @Consulta NVARCHAR(MAX) = 'SELECT ' + @Columnas + ' FROM '+@Tabla;
+				DECLARE @Consulta NVARCHAR(MAX) = 'SELECT ' + '*' + ' FROM '+@Tabla;
 
 				DECLARE @EXIT INT = 1;
 
@@ -101,24 +103,28 @@ BEGIN
 				END 
 
 				EXECUTE(@Consulta);
+
 			END TRY 
 			BEGIN CATCH 
-				RAISERROR('error', 16, 1);
+				THROW 50001, 'error', 1;
+				SELECT 'error';
 			END CATCH 
 
 		END
 		ELSE BEGIN 
-			RAISERROR('error', 16, 1);
+			SELECT 'error';
 		END
 	END TRY
 	BEGIN CATCH
 		THROW 50001, 'error', 1;
+		SELECT 'error';
 	END CATCH
 END
 
 
+EXECUTE ListarPTabla @Tabla = 'reservasss', @campo='cedusla', @valor='8888888888';
 
-EXECUTE ListarPTabla @Tabla = 'reserva';
+
 
 GO
 
@@ -187,8 +193,8 @@ BEGIN
 END
 
 EXEC EliminarPTabla 
-				@Tabla = 'usuario', 
-				@Key = 'cedula', 
+				@Tabla = 'usuarisssso', 
+				@Key = 'cedulas', 
 				@value = '8888888887';
 
 
