@@ -1,6 +1,7 @@
 --Procedimiento almacenados Padre para Listar
 ALTER PROCEDURE ListarPTabla
 	@Tabla NVARCHAR(MAX),
+	@nRelaciones INT = 0,
 	@campo NVARCHAR(MAX) = '',
 	@valor NVARCHAR(MAX) = '',
 	@resultadoSalida NVARCHAR(MAX) = '' OUTPUT
@@ -30,7 +31,7 @@ BEGIN
 				
 				IF @campo != '' AND @valor != '' 
 				BEGIN 
-					SET @sql += ' WHERE ' + @campo + ' = ' + @valor;
+					SET @sql += ' WHERE ' + dbo.FuncionString(@nRelaciones, @campo, @valor, 'verificar');
 				END
 
 				IF @comprobacion = 1 BEGIN 
@@ -140,7 +141,7 @@ BEGIN
 
 					--clausula (filtrador)
 					IF @campo != '' AND @valor != '' BEGIN 
-						SET @Consulta += ' WHERE ' + @campo + ' = ' + @valor;
+						SET @Consulta += ' WHERE ' + dbo.FuncionString(@nRelaciones, @campo, @valor, 'verificar');
 					END 
 
 					--tabla temporal...
@@ -204,7 +205,7 @@ BEGIN
 	BEGIN TRY
 		
 		DECLARE @resultadoTexto NVARCHAR(MAX) = '';
-		EXECUTE ListarPTabla @Tabla = @TablaEntrada, @campo=@Esquema, @valor=@Registros, @resultadoSalida = @resultadoTexto OUTPUT;
+		EXECUTE ListarPTabla @Tabla = @TablaEntrada, @NRelaciones = @NumeroCampos, @campo=@Esquema, @valor=@Registros, @resultadoSalida = @resultadoTexto OUTPUT;
 
 		IF @resultadoTexto != 'sin_data' AND @resultadoTexto != 'error' BEGIN 
 			DECLARE @SQL NVARCHAR(MAX) = N'INSERT INTO ' + @TablaEntrada + '(' + @Esquema + ')' + ' VALUES(';
@@ -245,7 +246,7 @@ AS
 BEGIN
 	BEGIN TRY 
 		DECLARE @resultadoTexto NVARCHAR(MAX) = '';
-		EXECUTE ListarPTabla @Tabla = @TablaEntrada, @campo=@key, @valor=@value, @resultadoSalida = @resultadoTexto OUTPUT;
+		EXECUTE ListarPTabla @Tabla = @TablaEntrada, @nRelaciones = 1, @campo=@key, @valor=@value, @resultadoSalida = @resultadoTexto OUTPUT;
 
 		IF (NOT @TablaEntrada = '') AND (NOT @key = '') AND (NOT @value = '') AND @resultadoTexto != 'sin_data' AND @resultadoTexto != 'error' BEGIN
 			DECLARE @CMD NVARCHAR(MAX) = 'DELETE FROM';
@@ -288,7 +289,7 @@ AS
 BEGIN 
 	BEGIN TRY
 		DECLARE @resultadoTexto NVARCHAR(MAX) = '';
-		EXECUTE ListarPTabla @Tabla = @TablaEntrada, @campo=@CampoCondicional, @valor=@ValorCondicional, @resultadoSalida = @resultadoTexto OUTPUT;
+		EXECUTE ListarPTabla @Tabla = @TablaEntrada, @nRelaciones = @NCondicional, @campo=@CampoCondicional, @valor=@ValorCondicional, @resultadoSalida = @resultadoTexto OUTPUT;
 
 		IF @resultadoTexto != 'sin_data' AND @resultadoTexto != 'error' BEGIN 
 
@@ -389,6 +390,14 @@ BEGIN
 				SET @CMD += ' AND ';
 			END
 		END
+
+		IF LOWER(@Tipo) = 'verificar' BEGIN 
+			SET @CMD += @NColumna1 + ' = ' + @NColumna2;
+
+			IF @Indice != @NColumnas BEGIN 
+				SET @CMD += ' OR ';
+			END
+		END
 		
 		SET @Indice += 1
 	END
@@ -398,10 +407,5 @@ END
 
 GO
 
-
-DECLARE @result NVARCHAR(80) = dbo.FuncionString(3,'relacion1, relacion, relacion2', '(fidjidf), (difjid), (dfiji)', 'crear');
+DECLARE @result NVARCHAR(80) = dbo.FuncionString(2,'relacion1, relacion2', 'fidjidf, difji', 'verificar');
 PRINT @result;
-
-GO
-
-SELECT * FROM UsuarioPerfil;
