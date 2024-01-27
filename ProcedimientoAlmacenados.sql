@@ -239,46 +239,91 @@ SELECT @TablaSecundaria = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@Tabla+'_', ''),
 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
 	INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C 
 		ON K.COLUMN_NAME = C.COLUMN_NAME
-WHERE K.TABLE_NAME = @Tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = 4;
+WHERE K.TABLE_NAME = @Tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = 6;
+
 
 IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' ) 
 BEGIN  
 	DECLARE @EXIT INT = 1;
-	WHILE @EXIT = 1 BEGIN 
+	WHILE @EXIT = 1 BEGIN -- este bucle debe captar todas las foraneas existentes.
+
 		-- reafinar un poco mas esta parte del codigo.
-		DECLARE @actualizarTabla NVARCHAR(MAX);
-		SET @actualizarTabla = @TablaSecundaria;
-
-		SELECT 
-			@consulta += ' INNER JOIN ' + @TablaSecundaria + ' ON ' + @Tabla + '.' + @Columna + ' = ' + @TablaSecundaria + '.' + 
-			( 
-				SELECT TOP 1 COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = @TablaSecundaria AND CONSTRAINT_NAME LIKE '%PK%' 
-			),
-			@Tabla = @actualizarTabla,
-			@Columna = K.COLUMN_NAME,
-			@TablaSecundaria = (
-				CASE
-					WHEN COUNT(*) >= 1 THEN REPLACE(REPLACE(K.CONSTRAINT_NAME, 'FK_'+@TablaSecundaria+'_', ''), '_'+K.COLUMN_NAME, '') -- sacamos la otra tabla
-					ELSE 	
-						'no'
-				END 
-			)
-
+		DECLARE @Minimo INT = (SELECT TOP 1 C.ORDINAL_POSITION
 		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
 			INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
 				ON k.COLUMN_NAME = C.COLUMN_NAME
-		WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%'
-		GROUP BY K.CONSTRAINT_NAME, K.COLUMN_NAME;
+		WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' 
+		ORDER BY C.ORDINAL_POSITION ASC);
 
+		DECLARE @Maximo INT = (SELECT TOP 1 C.ORDINAL_POSITION
+		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
+			INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+				ON k.COLUMN_NAME = C.COLUMN_NAME
+		WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' 
+		ORDER BY C.ORDINAL_POSITION DESC);
 
-		IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' ) BEGIN
-			SELECT @consulta += ' INNER JOIN ' + @TablaSecundaria + ' ON ' + @Tabla + '.' + @Columna + ' = ' + @TablaSecundaria + '.' + K.COLUMN_NAME
+		DECLARE @actualizarTabla NVARCHAR(MAX);
+		SET @actualizarTabla = @TablaSecundaria;
+
+		DECLARE @actualizarConstraint NVARCHAR(MAX);
+		SET @actualizarConstraint = @TablaSecundaria;
+
+		-- este es importante nos ayudara a verificar si existe otras relaciones 
+		DECLARE @verificarRelaciones INT = 0;
+
+		WHILE @Minimo <= @Maximo BEGIN 
+	
+			SELECT 
+				@consulta += (
+					CASE
+						WHEN @actualizarTabla = @TablaSecundaria THEN
+						  ' INNER JOIN ' + @TablaSecundaria + ' ON ' + @Tabla + '.' + @Columna + ' = ' + @TablaSecundaria + '.' + 
+						  	( 
+								SELECT TOP 1 COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = @TablaSecundaria AND CONSTRAINT_NAME LIKE '%PK%' 
+							)
+						ELSE 
+							''
+					END 
+				),
+				@Tabla = @actualizarTabla,
+				@Columna = K.COLUMN_NAME,
+				@TablaSecundaria = (
+					CASE
+						WHEN COUNT(*) >= 1 THEN REPLACE(REPLACE(K.CONSTRAINT_NAME, 'FK_'+@actualizarConstraint+'_', ''), '_'+K.COLUMN_NAME, '') -- sacamos la otra tabla
+						ELSE 	
+							'no'
+					END 
+				)
+
 			FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
 				INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
 					ON k.COLUMN_NAME = C.COLUMN_NAME
-			WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%PK%' 
-			SET @EXIT = 0; 
+			WHERE K.TABLE_NAME = @actualizarTabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Minimo
+			GROUP BY K.CONSTRAINT_NAME, K.COLUMN_NAME, C.ORDINAL_POSITION
+			ORDER BY C.ORDINAL_POSITION ASC;
+
+
+			IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' ) BEGIN
+				SELECT @consulta += ' INNER JOIN ' + @TablaSecundaria + ' ON ' + @Tabla + '.' + @Columna + ' = ' + @TablaSecundaria + '.' + K.COLUMN_NAME
+				FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
+					INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
+						ON k.COLUMN_NAME = C.COLUMN_NAME
+				WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%PK%' 
+
+			END
+			ELSE 
+			BEGIN 
+				SET @verificarRelaciones = 1;
+			END
+
+			IF (@verificarRelaciones = 0) AND (@Minimo = @Maximo)
+			BEGIN 
+				SET @EXIT = 0; 
+			END 	
+			
+			SET @Minimo += 1;
 		END
+
 	END
 
 END 
@@ -292,6 +337,7 @@ BEGIN
 END
 
 SELECT @consulta;
+
 
 
 GO
