@@ -34,6 +34,7 @@ BEGIN
 		WHERE k.TABLE_NAME = @Tabla AND k.CONSTRAINT_NAME LIKE '%FK%'
 		ORDER BY c.ORDINAL_POSITION ASC );
 
+
 		DECLARE @maximo INT = (SELECT TOP 1 c.ORDINAL_POSITION
 		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as k 
 			INNER JOIN INFORMATION_SCHEMA.COLUMNS as c 
@@ -41,11 +42,12 @@ BEGIN
 		WHERE k.TABLE_NAME = @Tabla AND k.CONSTRAINT_NAME LIKE '%FK%'
 		ORDER BY c.ORDINAL_POSITION DESC);
 
+
 		-- verificamos si existe... y pasamos a llamar al select.			
 		DECLARE @var tablaVerificar;
 		INSERT INTO @var(Tabla, NRelaciones, Campo, Valor) VALUES(@Tabla, @nRelaciones, @campo, @valor);
 		DECLARE @resultado NVARCHAR(MAX) = (SELECT * FROM dbo.Verificar(@var, 0, @NumeroLlaves, @minimo, @maximo));
-		
+
 		INSERT INTO #resultado
 		EXECUTE(@resultado);
 
@@ -68,7 +70,7 @@ END
 EXECUTE ListarPTabla @Tabla = 'usuario', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(120)';	
 EXECUTE ListarPTabla @Tabla = 'reserva';
 
-SELECT * FROM perfil;
+SELECT * FROM reserva;
 
 GO
 
@@ -106,7 +108,6 @@ SELECT * FROM usuario;
 GO
 
 
-
 --Procedimiento almacenados Padre para Eliminar
 ALTER PROCEDURE EliminarPTabla
 	@TablaEntrada NVARCHAR(MAX) = '',
@@ -138,10 +139,9 @@ BEGIN
 END
 
 EXEC EliminarPTabla 
-				@TablaEntrada = 'usuario', 
-				@Key = 'usuario_id', 
-				@value = '(28)';
-
+				@TablaEntrada = 'carroceria', 
+				@Key = 'carroceria_id', 
+				@value = '(21)';
 
 
 GO
@@ -205,16 +205,45 @@ EXEC ActualizarPTabla
 SELECT * FROM MetodoPago;
 
 
+/* ==================================================== */
+-- 				PROCEDIMIENTO ALMACENADO PARA LOGIN
+/* ==================================================== */
 GO
 
+ALTER PROCEDURE ModuloSeguridad 
+	@Email NVARCHAR(MAX),
+	@Passwd NVARCHAR(MAX)
+AS 
+BEGIN 
+	BEGIN TRY 
+		DECLARE @valores NVARCHAR(MAX) = CONCAT('(', @Email, '),', '(', @Passwd, ')')
+		DECLARE @resultado NVARCHAR(MAX);
+		EXECUTE ListarPTabla @Tabla = 'usuarioPerfil', @nRelaciones = 2, @campo = 'usuario_correo, usuario_contrasena', @valor = @valores, @resultadoSalida = @resultado OUTPUT;	
+	
+		IF @resultado = 'sin_coincidencia' BEGIN 
+			SELECT 'credenciales_incorrectas';
+		END 
 
-GO
+	END TRY 
+	BEGIN CATCH 
+		SELECT 'error';
+	END CATCH 
+END 
+
+
+EXEC ModuloSeguridad @Email = 'juan_gomez@example.com', @Passwd = 'A289424F-2958-4';
+SELECT * FROM usuario;
+
+
+exec sp_columns perfil;
+
 /* =================================================== */
 --			     FUNCION SUBSTRING                      --
 /* =================================================== */
 
+GO
 
-ALTER FUNCTION Verificar( @informacion tablaVerificar READONLY, @estado INT = 0 , @numeroLlaves INT, @minimoEntrada INT = 0, @maximoEntrada INT = 0)
+ALTER FUNCTION Verificar( @informacion tablaVerificar READONLY, @estado INT = 0 , @numeroLlaves INT, @minimo INT = 0, @maximo INT = 0)
 	RETURNS @verificado TABLE( resultado NVARCHAR(MAX) )
 AS
 BEGIN 	
@@ -226,131 +255,131 @@ BEGIN
 
 	DECLARE @comprobacion INT = 1;
 
-	DECLARE @Tabla_Entrada NVARCHAR(MAX) = (SELECT Tabla FROM @informacion);
+	DECLARE @tabla NVARCHAR(MAX) = (SELECT Tabla FROM @informacion);
 	DECLARE @NRelaciones INT = (SELECT NRelaciones FROM @informacion);
 	DECLARE @Campo NVARCHAR(MAX) = (SELECT Campo FROM @informacion);
 	DECLARE @Valor NVARCHAR(MAX) = (SELECT Valor FROM @informacion);
 
-	SET @sql += 'FROM ' + @Tabla_Entrada;
+	SET @sql += 'FROM ' + @tabla;
 
 	IF @numeroLlaves > 1 
 	BEGIN
+		WHILE @minimo <= @maximo BEGIN 
+	
+			DECLARE @indices NVARCHAR(MAX);
 
-		DECLARE @guardarTablaOriginal NVARCHAR(MAX);
-		SET @guardarTablaOriginal = @Tabla_Entrada;
+			SELECT 
+				@indices = (CASE
+					WHEN COUNT(*) != 0 THEN CAST(@minimo AS NVARCHAR(MAX)) 
+					ELSE 
+						'error'
+				END) 
+			FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as k
+			WHERE EXISTS(
+				SELECT * 
+				FROM INFORMATION_SCHEMA.COLUMNS AS c
+				WHERE c.ORDINAL_POSITION = @minimo AND k.COLUMN_NAME = c.COLUMN_NAME AND k.CONSTRAINT_NAME LIKE '%FK%' AND c.TABLE_NAME = @tabla
+			);
 
-		WHILE @minimoEntrada <= @maximoEntrada BEGIN 
-			
-			DECLARE @TablaSecundaria NVARCHAR(MAX);
-			DECLARE @Columna NVARCHAR(MAX);
+			IF @indices != 'error' BEGIN 
+				DECLARE @TablaSecundaria NVARCHAR(MAX), @Columna NVARCHAR(MAX);
 
-			SELECT @TablaSecundaria = REPLACE(K.CONSTRAINT_NAME, 'FK_'+@Tabla_Entrada+'_', ''), 
+				SELECT @TablaSecundaria = REPLACE(K.CONSTRAINT_NAME, 'FK_'+K.TABLE_NAME+'_', ''), 
 					@Columna = K.COLUMN_NAME,
-					@TablaSecundaria = REPLACE(@TablaSecundaria, '_'+@Columna, '')
-			FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
-				INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C 
-					ON K.COLUMN_NAME = C.COLUMN_NAME
-			WHERE K.TABLE_NAME = @Tabla_Entrada AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @minimoEntrada;
+					@TablaSecundaria = REPLACE(@TablaSecundaria, '_'+K.COLUMN_NAME, '')
+				FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
+					INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C 
+						ON K.COLUMN_NAME = C.COLUMN_NAME
+				WHERE K.TABLE_NAME = @tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = CAST(@indices AS INT)
+				ORDER BY C.ORDINAL_POSITION ASC;
+				
+				SELECT @sql += ' INNER JOIN ' + @TablaSecundaria + ' ON (' + @tabla + '.' + @Columna + ' = ' + c.TABLE_NAME + '.' + c.COLUMN_NAME + ')'
+				FROM INFORMATION_SCHEMA.COLUMNS as c
+				WHERE EXISTS(
+					SELECT * 
+					FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as k
+					WHERE c.TABLE_NAME = @TablaSecundaria AND k.TABLE_NAME = @TablaSecundaria AND c.COLUMN_NAME = k.COLUMN_NAME AND k.CONSTRAINT_NAME LIKE '%PK%'
+				);		
 
-
-			IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' ) 
-			BEGIN  
+				--aqui comprobamos si la tabla secundaria tiene otras relaciones mas adicionales que realizarse.
 				DECLARE @EXIT INT = 1;
-				WHILE @EXIT = 1 BEGIN -- este bucle debe captar todas las foraneas existentes.
 
-					-- reafinar un poco mas esta parte del codigo.
-					DECLARE @Minimo INT = (SELECT TOP 1 C.ORDINAL_POSITION
+				WHILE @EXIT = 1 BEGIN 
+					DECLARE @inicio INT = (SELECT TOP 1 C.ORDINAL_POSITION
 					FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
 						INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
 							ON k.COLUMN_NAME = C.COLUMN_NAME
 					WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' 
 					ORDER BY C.ORDINAL_POSITION ASC);
 
-					DECLARE @Maximo INT = (SELECT TOP 1 C.ORDINAL_POSITION
+					DECLARE @final INT = (SELECT TOP 1 C.ORDINAL_POSITION
 					FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
 						INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
 							ON k.COLUMN_NAME = C.COLUMN_NAME
 					WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' 
 					ORDER BY C.ORDINAL_POSITION DESC);
 
-					DECLARE @actualizarTabla NVARCHAR(MAX);
-					SET @actualizarTabla = @TablaSecundaria;
+					DECLARE @actualizarTabla NVARCHAR(MAX) = 'sin_tabla';
+					WHILE @inicio <= @final BEGIN 
+						DECLARE @indices2 NVARCHAR(MAX);
 
-					DECLARE @actualizarConstraint NVARCHAR(MAX);
-					SET @actualizarConstraint = @TablaSecundaria;
-
-					-- este es importante nos ayudara a verificar si existe otras relaciones 
-					DECLARE @verificarRelaciones INT = 0;
-
-					WHILE @Minimo <= @Maximo BEGIN 
-				
 						SELECT 
-							@sql += (
+							@indices2 = (
 								CASE
-									WHEN @actualizarTabla = @TablaSecundaria THEN
-									' INNER JOIN ' + @TablaSecundaria + ' ON ' + @Tabla_Entrada + '.' + @Columna + ' = ' + @TablaSecundaria + '.' + 
-										( 
-											SELECT TOP 1 COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = @TablaSecundaria AND CONSTRAINT_NAME LIKE '%PK%' 
-										)
+									WHEN COUNT(*) != 0 THEN CAST(@inicio AS NVARCHAR(MAX))
 									ELSE 
-										''
-								END 
-							),
-							@Tabla_Entrada = @actualizarTabla,
-							@Columna = K.COLUMN_NAME,
-							@TablaSecundaria = (
-								CASE
-									WHEN COUNT(*) >= 1 THEN REPLACE(REPLACE(K.CONSTRAINT_NAME, 'FK_'+@actualizarConstraint+'_', ''), '_'+K.COLUMN_NAME, '') -- sacamos la otra tabla
-									ELSE 	
-										'no'
+										'error'
 								END 
 							)
+						FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as k
+						WHERE EXISTS(
+							SELECT * 
+							FROM INFORMATION_SCHEMA.COLUMNS as c 
+							WHERE k.TABLE_NAME = @TablaSecundaria AND c.TABLE_NAME = @TablaSecundaria AND k.CONSTRAINT_NAME LIKE '%FK%' AND c.ORDINAL_POSITION = @inicio
+						);	
+					
+						IF @indices2 != 'error' BEGIN 
+							DECLARE @otraTabla NVARCHAR(MAX), @Columna2 NVARCHAR(MAX);
 
-						FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
-							INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
-								ON k.COLUMN_NAME = C.COLUMN_NAME
-						WHERE K.TABLE_NAME = @actualizarTabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = @Minimo
-						GROUP BY K.CONSTRAINT_NAME, K.COLUMN_NAME, C.ORDINAL_POSITION
-						ORDER BY C.ORDINAL_POSITION ASC;
+							SELECT @otraTabla = REPLACE(K.CONSTRAINT_NAME, 'FK_'+K.TABLE_NAME+'_', ''), 
+								@Columna2 = K.COLUMN_NAME,
+								@otraTabla = REPLACE(@otraTabla, '_'+K.COLUMN_NAME, '')
+							FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K 
+								INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C 
+									ON K.COLUMN_NAME = C.COLUMN_NAME
+							WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = CAST(@indices2 AS INT)
+							ORDER BY C.ORDINAL_POSITION ASC;
+				
+							SELECT @sql += ' INNER JOIN ' + @otraTabla + ' ON (' + @TablaSecundaria + '.' + @Columna2 + ' = ' + c.TABLE_NAME + '.' + c.COLUMN_NAME + ')'
+							FROM INFORMATION_SCHEMA.COLUMNS as c
+							WHERE EXISTS(
+								SELECT * 
+								FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as k
+								WHERE c.TABLE_NAME = @otraTabla AND k.TABLE_NAME = @otraTabla AND c.COLUMN_NAME = k.COLUMN_NAME AND k.CONSTRAINT_NAME LIKE '%PK%'
+							);
 
+							-- comprobar si otraTabla tiene alguna relacion con otra tabla ....
+							IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%') BEGIN 
+								SET @actualizarTabla = @otraTabla
+							END 
+						END 
 
-						IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' ) BEGIN
-							SELECT @sql += ' INNER JOIN ' + @TablaSecundaria + ' ON ' + @Tabla_Entrada + '.' + @Columna + ' = ' + @TablaSecundaria + '.' + K.COLUMN_NAME
-							FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
-								INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
-									ON k.COLUMN_NAME = C.COLUMN_NAME
-							WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%PK%' 
+						SET @inicio += 1;
+					END 
 
-						END
-						ELSE 
-						BEGIN 
-							SET @verificarRelaciones = 1;
-						END
+					IF (@actualizarTabla != 'sin_tabla') AND (@inicio != @final) BEGIN 
+						-- actualizamos nuestar tabla secundaria 
+						SET @TablaSecundaria = @actualizarTabla
+					END 
+					ELSE BEGIN 
+						SET @EXIT = 0;
+					END 
 
-						IF (@verificarRelaciones = 0) AND (@Minimo = @Maximo)
-						BEGIN 
-							SET @EXIT = 0; 
-						END 	
-						
-						SET @Minimo += 1;
-					END
-
-				END
-
+				END -- while = 1
 			END 
-			ELSE IF @TablaSecundaria IS NOT NULL 
-			BEGIN 
-				SELECT @sql += ' INNER JOIN ' + @TablaSecundaria + ' ON ' + @Tabla_Entrada + '.' + @Columna + ' = ' + @TablaSecundaria + '.' + K.COLUMN_NAME
-				FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS K
-					INNER JOIN INFORMATION_SCHEMA.COLUMNS AS C
-						ON k.COLUMN_NAME = C.COLUMN_NAME
-				WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%PK%' 
-			END
 
-			SET @minimoEntrada += 1;
-			SET @Tabla_Entrada = @guardarTablaOriginal;
+			SET @minimo += 1;
 		END
-
 	END -- -
 
 	IF @Campo != '' AND @Valor != '' 
@@ -365,14 +394,6 @@ BEGIN
 END
 
 GO
-
-DECLARE @entrada tablaVerificar;
-INSERT INTO @entrada(Tabla, NRelaciones, Campo, Valor) VALUES('reserva', 0, '', '');
-SELECT * FROM Verificar(@entrada, 0, 6, 0, 0);
-
-
-GO
-
 -- funcion con valores de tabla
 ALTER FUNCTION FuncionString(@NColumnas INT, @Columnas NVARCHAR(MAX), @Columnas2 NVARCHAR(MAX), @Tipo NVARCHAR(50)) 
 	RETURNS NVARCHAR(MAX)
@@ -459,6 +480,3 @@ PRINT @result;
 
 
 GO
-
-
-SELECT * FROM auto;
