@@ -68,7 +68,7 @@ BEGIN
 END
 
 EXECUTE ListarPTabla @Tabla = 'usuario', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(120)';	
-EXECUTE ListarPTabla @Tabla = 'usuario';
+EXECUTE ListarPTabla @Tabla = 'reserva', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(26)';
 
 DELETE FROM usuario WHERE usuario_id = 43;
 
@@ -111,10 +111,11 @@ EXECUTE CrearPTabla
 				@TablaEntrada = 'usuario', 
 				@NumeroCampos = 6, 
 				@Esquema = 'usuario_nombre, usuario_apellido, usuario_cedula, usuario_celular, usuario_correo, usuario_contrasena',  
-				@Registros = '(mic), (mic), (0956898777), (1112229087), (115.200), (A909JJJJI-4)';
+				@Registros = '(mic), (mic), (0956898777), (1112229087), (mic@hotmail.com), (A909JJJJI-4)';
 
 
-DELETE FROM usuario WHERE usuario_id = 57;
+DELETE FROM usuario WHERE usuario_id >= 46;
+
 
 GO
 
@@ -216,7 +217,7 @@ SELECT * FROM MetodoPago;
 
 
 /* ==================================================== */
--- 				PROCEDIMIENTO ALMACENADO PARA LOGIN
+-- 		 PROCEDIMIENTO ALMACENADO PARA LOGIN
 /* ==================================================== */
 GO
 
