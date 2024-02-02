@@ -66,7 +66,7 @@ BEGIN
 END
 
 EXECUTE ListarPTabla @Tabla = 'usuario', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(120)';	
-EXECUTE ListarPTabla @Tabla = 'reserva';
+EXECUTE ListarPTabla @Tabla = 'reserva', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(2)';
 
 DELETE FROM usuario WHERE usuario_id = 43;
 
