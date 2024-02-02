@@ -34,14 +34,12 @@ BEGIN
 		WHERE k.TABLE_NAME = @Tabla AND k.CONSTRAINT_NAME LIKE '%FK%'
 		ORDER BY c.ORDINAL_POSITION ASC );
 
-
 		DECLARE @maximo INT = (SELECT TOP 1 c.ORDINAL_POSITION
 		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as k 
 			INNER JOIN INFORMATION_SCHEMA.COLUMNS as c 
 				ON k.COLUMN_NAME = c.COLUMN_NAME
 		WHERE k.TABLE_NAME = @Tabla AND k.CONSTRAINT_NAME LIKE '%FK%'
 		ORDER BY c.ORDINAL_POSITION DESC);
-
 
 		-- verificamos si existe... y pasamos a llamar al select.			
 		DECLARE @var tablaVerificar;
@@ -68,7 +66,7 @@ BEGIN
 END
 
 EXECUTE ListarPTabla @Tabla = 'usuario', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(120)';	
-EXECUTE ListarPTabla @Tabla = 'reserva', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(26)';
+EXECUTE ListarPTabla @Tabla = 'reserva';
 
 DELETE FROM usuario WHERE usuario_id = 43;
 
@@ -304,7 +302,7 @@ BEGIN
 				WHERE K.TABLE_NAME = @tabla AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = CAST(@indices AS INT)
 				ORDER BY C.ORDINAL_POSITION ASC;
 				
-				SELECT @sql += ' INNER JOIN ' + @TablaSecundaria + ' ON (' + @tabla + '.' + @Columna + ' = ' + c.TABLE_NAME + '.' + c.COLUMN_NAME + ')'
+				SELECT @sql += ' LEFT JOIN ' + @TablaSecundaria + ' ON (' + @tabla + '.' + @Columna + ' = ' + c.TABLE_NAME + '.' + c.COLUMN_NAME + ')'
 				FROM INFORMATION_SCHEMA.COLUMNS as c
 				WHERE EXISTS(
 					SELECT * 
@@ -361,7 +359,7 @@ BEGIN
 							WHERE K.TABLE_NAME = @TablaSecundaria AND K.CONSTRAINT_NAME LIKE '%FK%' AND C.ORDINAL_POSITION = CAST(@indices2 AS INT)
 							ORDER BY C.ORDINAL_POSITION ASC;
 				
-							SELECT @sql += ' INNER JOIN ' + @otraTabla + ' ON (' + @TablaSecundaria + '.' + @Columna2 + ' = ' + c.TABLE_NAME + '.' + c.COLUMN_NAME + ')'
+							SELECT @sql += ' LEFT JOIN ' + @otraTabla + ' ON (' + @TablaSecundaria + '.' + @Columna2 + ' = ' + c.TABLE_NAME + '.' + c.COLUMN_NAME + ')'
 							FROM INFORMATION_SCHEMA.COLUMNS as c
 							WHERE EXISTS(
 								SELECT * 
@@ -405,6 +403,11 @@ BEGIN
 END
 
 GO
+
+EXECUTE ListarPTabla @Tabla = 'reserva';
+
+GO
+
 -- funcion con valores de tabla
 ALTER FUNCTION FuncionString(@NColumnas INT, @Columnas NVARCHAR(MAX), @Columnas2 NVARCHAR(MAX), @Tipo NVARCHAR(50)) 
 	RETURNS NVARCHAR(MAX)
