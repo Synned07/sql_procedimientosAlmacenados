@@ -1,0 +1,15 @@
+SELECT *
+    FROM Reserva
+    INNER JOIN Auto
+        ON (condicional)
+    INNER JOIN Inventario
+        ON (condicional2)
+    INNER JOIN Compra
+        ON (condicional)
+    INNER JOIN MetodoPago
+        ON (condicional2)
+    INNER JOIN PruebaManejo
+        ON (condicional)
+    INNER JOIN UsuarioPerfil
+        ON (condicional)
+        -- usuario y perfil...

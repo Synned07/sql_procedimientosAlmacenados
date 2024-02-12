@@ -1,3 +1,101 @@
+CREATE OR ALTER PROCEDURE Proc_CrudTablas
+    @Tabla NVARCHAR(MAX),
+    @Tipo NVARCHAR(MAX)
+AS
+    BEGIN
+        BEGIN TRY
+            SET @Tipo = LOWER(@Tipo);
+            DECLARE
+                @CMD NVARCHAR(MAX)
+            BEGIN
+                IF @Tipo = 'listar'
+                BEGIN
+                    SET @CMD = ' SELECT * FROM ' + @Tabla;
+                    -- si tiene otras relaciones esta consulta las va construyendo...
+                    DECLARE
+                        @TablaSecundaria NVARCHAR(MAX)
+                    BEGIN
+                        CREATE TABLE #relacionesT (id INT IDENTITY(1,1), tablas NVARCHAR(MAX));
+
+                        INSERT INTO #relacionesT
+                        SELECT
+                            CASE
+                                WHEN (
+                                    SELECT COUNT(verificar.CONSTRAINT_NAME)
+                                    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as verificar
+                                    WHERE verificar.TABLE_NAME = REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, '')
+                                    AND verificar.CONSTRAINT_NAME LIKE '%FK%'
+                                ) > 0 THEN REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, '')
+                                ELSE
+                                    'sin_tabla'
+                            END
+                        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS principal
+                        WHERE principal.TABLE_NAME = @Tabla AND principal.CONSTRAINT_NAME LIKE '%FK%';
+
+                        DECLARE
+                            @minimo INT = (SELECT top 1 id FROM #relacionesT ORDER BY id ASC),
+                            @maximo INT = (SELECT top 1 id FROM #relacionesT ORDER BY id DESC)
+                        BEGIN
+                            SET @minimo -= 1;
+                            WHILE @minimo <= @maximo BEGIN
+                                SELECT
+                                    @TablaSecundaria = REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, ''),
+                                    @CMD += ' INNER JOIN ',
+                                    @CMD += @TablaSecundaria,
+                                    @CMD += ' ON (' + principal.COLUMN_NAME + '=',
+                                    @CMD += (
+                                        SELECT COLUMN_NAME
+                                        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                                        WHERE TABLE_NAME = REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, '')
+                                        AND CONSTRAINT_NAME LIKE '%PK%'
+                                    )
+                                    ,
+                                    @CMD += ')'
+                                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS principal
+                                WHERE principal.TABLE_NAME = (
+                                    CASE
+                                        WHEN @minimo = 0 THEN @Tabla
+                                        ELSE
+                                            (SELECT tablas FROM #relacionesT WHERE id = @minimo)
+                                    END
+                                ) AND principal.CONSTRAINT_NAME LIKE '%FK%';
+
+                                SET @minimo += 1;
+                            END
+
+                            SELECT 'resultadoFinal';
+                        END
+                    END
+                END
+                ELSE IF @Tipo = 'crear' BEGIN
+                    -- vamos a crear a continuacion
+                    select 'ok';
+                END
+                ELSE IF @Tipo = 'actualizar' BEGIN
+                    -- vamos a actualizar a continuacion...
+                    select 'ok';
+                END
+                ELSE IF @Tipo = 'eliminar' BEGIN
+                    -- vamos a eliminar a continuacion...
+                    select 'ok';
+                END
+                ELSE BEGIN
+                    SELECT 'opcion_incorrecto';
+                END
+            END
+        END TRY
+        BEGIN CATCH
+            SELECT 'error', ERROR_MESSAGE();
+        END CATCH
+    END
+
+EXEC Proc_CrudTablas @Tabla = 'Reserva', @Tipo = 'listar';
+
+SELECT * FROM usuario;
+
+GO
+
+
 CREATE TYPE tablaVerificar AS TABLE (
 	Tabla NVARCHAR(MAX) NOT NULL,
 	NRelaciones INT DEFAULT 0,
@@ -5,6 +103,7 @@ CREATE TYPE tablaVerificar AS TABLE (
 	Valor NVARCHAR(MAX) DEFAULT '',
 	ResultadoFinal INT DEFAULT 0
 );
+
 
 
 GO
@@ -66,11 +165,17 @@ BEGIN
 END
 
 EXECUTE ListarPTabla @Tabla = 'usuario', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(120)';	
-EXECUTE ListarPTabla @Tabla = 'reserva', @nRelaciones = 1, @campo = 'usuario_id', @valor = '(2)';
+EXECUTE ListarPTabla @Tabla = 'reserva';
 
 DELETE FROM usuario WHERE usuario_id = 43;
 
+SELECT * FROM Usuario;
+
+
 GO
+
+
+
 
 --Procedimiento almacenados Padre para Crear
 ALTER PROCEDURE CrearPTabla
@@ -494,3 +599,5 @@ PRINT @result;
 
 
 GO
+
+USE SQLDB_CONCESIONARIA;
