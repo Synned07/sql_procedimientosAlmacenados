@@ -1,15 +1,13 @@
-SELECT *
-    FROM Reserva
-    INNER JOIN Auto
-        ON (condicional)
-    INNER JOIN Inventario
-        ON (condicional2)
-    INNER JOIN Compra
-        ON (condicional)
-    INNER JOIN MetodoPago
-        ON (condicional2)
-    INNER JOIN PruebaManejo
-        ON (condicional)
-    INNER JOIN UsuarioPerfil
-        ON (condicional)
-        -- usuario y perfil...
+ SELECT * FROM Reserva
+    INNER JOIN Auto ON (reserva_AutoId=auto_id)
+    INNER JOIN Compra ON (reserva_compraId=compra_id)
+    INNER JOIN PruebaManejo ON (reserva_pruebaManejoId=pruebaManejo_id)
+    INNER JOIN UsuarioPerfil ON (reserva_usuarioPerfilId=usuarioPerfil_id)
+    INNER JOIN Inventario ON (auto_inventarioId=inventario_id)
+    INNER JOIN MetodoPago ON (compra_metodoPagoId=metodoPago_id)
+    INNER JOIN Perfil ON (usuarioPerfil_perfilId=perfil_id)
+    INNER JOIN Usuario ON (usuarioPerfil_usuarioId=usuario_id)
+    INNER JOIN Carroceria ON (inventario_carroceriaId=carroceria_id)
+    INNER JOIN Color ON (inventario_colorId=color_id)
+    INNER JOIN Marca ON (inventario_marcaId=marca_id)
+    INNER JOIN Modelo ON (inventario_modeloId=modelo_id)

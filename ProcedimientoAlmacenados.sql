@@ -2,96 +2,124 @@ CREATE OR ALTER PROCEDURE Proc_CrudTablas
     @Tabla NVARCHAR(MAX),
     @Tipo NVARCHAR(MAX)
 AS
-    BEGIN
-        BEGIN TRY
-            SET @Tipo = LOWER(@Tipo);
-            DECLARE
-                @CMD NVARCHAR(MAX)
-            BEGIN
-                IF @Tipo = 'listar'
-                BEGIN
-                    SET @CMD = ' SELECT * FROM ' + @Tabla;
-                    -- si tiene otras relaciones esta consulta las va construyendo...
-                    DECLARE
-                        @TablaSecundaria NVARCHAR(MAX)
-                    BEGIN
-                        CREATE TABLE #relacionesT (id INT IDENTITY(1,1), tablas NVARCHAR(MAX));
+BEGIN
+    BEGIN TRY
+        SET @Tipo = LOWER(@Tipo);
+        DECLARE @CMD NVARCHAR(MAX)
 
-                        INSERT INTO #relacionesT
+        IF @Tipo = 'listar'
+        BEGIN
+            SET @CMD = ' SELECT * FROM ' + @Tabla;
+            -- si tiene otras relaciones esta consulta las va construyendo...
+            CREATE TABLE #tablaT (id INT IDENTITY(1,1), tablas NVARCHAR(MAX));
+            INSERT INTO #tablaT SELECT @Tabla;
+            DECLARE @tMinimo INT = (SELECT TOP 1 id FROM #tablaT), @tMaximo INT = (SELECT TOP 1 id FROM #tablaT ORDER BY id DESC);
+
+            WHILE @tMinimo <= @tMaximo BEGIN
+                -- tiene otras relaciones.
+                CREATE TABLE #relacionesT (id INT IDENTITY(1,1), tablas NVARCHAR(MAX));
+                INSERT INTO #relacionesT
+                SELECT REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, '')
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS principal
+                WHERE principal.TABLE_NAME = (SELECT tablas FROM #tablaT WHERE id = @tMinimo) AND principal.CONSTRAINT_NAME LIKE '%FK%';
+
+                DECLARE @minimo INT = (SELECT TOP 1 id FROM #relacionesT);
+                DECLARE @maximo INT = (SELECT TOP 1 id FROM #relacionesT ORDER BY id DESC);
+
+                CREATE TABLE #TTemporal (id INT IDENTITY , tablas NVARCHAR(MAX));
+                WHILE @minimo <= @maximo BEGIN
+                    DECLARE @TablaRelacion NVARCHAR(MAX);
+
+                    SELECT @CMD += ' LEFT JOIN ' + tablas + ' ON ' + (
+                        SELECT COLUMN_NAME
+                        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                        WHERE TABLE_NAME = tablas AND CONSTRAINT_NAME LIKE '%PK%'
+                    ) + ' = ' + (
+                        SELECT COLUMN_NAME
+                        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                        WHERE TABLE_NAME = (SELECT tablas FROM #tablaT)
+                        AND
+                            REPLACE(REPLACE(CONSTRAINT_NAME, 'FK_'+TABLE_NAME+'_', ''), '_'+COLUMN_NAME, '') = tablas
+                            AND CONSTRAINT_NAME LIKE '%FK%'
+                    ),
+                    @TablaRelacion = tablas
+                    FROM #relacionesT
+                    WHERE id = @minimo
+
+                    CREATE TABLE #relacionesT2 ( id INT IDENTITY(1,1), tablas NVARCHAR(MAX) );
+                    INSERT INTO #relacionesT2
+                    SELECT
+                        CASE
+                            WHEN COUNT(COLUMN_NAME) > 0 THEN REPLACE(REPLACE(CONSTRAINT_NAME, 'FK_'+TABLE_NAME+'_', ''), '_'+COLUMN_NAME, '')
+                        END
+                    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                    WHERE TABLE_NAME = (
+                        SELECT tablas
+                        FROM #relacionesT WHERE id = @minimo
+                    )
+                    AND CONSTRAINT_NAME LIKE '%FK%'
+                    GROUP BY COLUMN_NAME, TABLE_NAME, CONSTRAINT_NAME;
+
+                    IF EXISTS(SELECT * FROM #relacionesT2) BEGIN
+                         SELECT @CMD += ' LEFT JOIN ' + tablas + ' ON ',
+                         @CMD += (
+                            SELECT COLUMN_NAME
+                            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                            WHERE TABLE_NAME = tablas AND CONSTRAINT_NAME LIKE '%PK%'
+                         ) + ' = ',
+                         @CMD += (
+                            SELECT COLUMN_NAME
+                            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                            WHERE TABLE_NAME = @TablaRelacion
+                            AND REPLACE(REPLACE(CONSTRAINT_NAME, 'FK_'+TABLE_NAME+'_', ''), '_'+COLUMN_NAME, '') = tablas
+                            AND CONSTRAINT_NAME LIKE '%FK%'
+                        )
+                        FROM #relacionesT2;
+
+                         --guardamos la tabla si hay mas relaciones.
+                        INSERT INTO #TTemporal
                         SELECT
                             CASE
-                                WHEN (
-                                    SELECT COUNT(verificar.CONSTRAINT_NAME)
-                                    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE as verificar
-                                    WHERE verificar.TABLE_NAME = REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, '')
-                                    AND verificar.CONSTRAINT_NAME LIKE '%FK%'
-                                ) > 0 THEN REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, '')
+                                WHEN(
+                                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_NAME LIKE '%FK%' AND TABLE_NAME = #relacionesT2.tablas
+                                ) > 0 THEN #relacionesT2.tablas
                                 ELSE
                                     'sin_tabla'
                             END
-                        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS principal
-                        WHERE principal.TABLE_NAME = @Tabla AND principal.CONSTRAINT_NAME LIKE '%FK%';
-
-                        DECLARE
-                            @minimo INT = (SELECT top 1 id FROM #relacionesT ORDER BY id ASC),
-                            @maximo INT = (SELECT top 1 id FROM #relacionesT ORDER BY id DESC)
-                        BEGIN
-                            SET @minimo -= 1;
-                            WHILE @minimo <= @maximo BEGIN
-                                SELECT
-                                    @TablaSecundaria = REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, ''),
-                                    @CMD += ' INNER JOIN ',
-                                    @CMD += @TablaSecundaria,
-                                    @CMD += ' ON (' + principal.COLUMN_NAME + '=',
-                                    @CMD += (
-                                        SELECT COLUMN_NAME
-                                        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-                                        WHERE TABLE_NAME = REPLACE(REPLACE(principal.CONSTRAINT_NAME, 'FK_'+principal.TABLE_NAME+'_', ''), '_'+principal.COLUMN_NAME, '')
-                                        AND CONSTRAINT_NAME LIKE '%PK%'
-                                    )
-                                    ,
-                                    @CMD += ')'
-                                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS principal
-                                WHERE principal.TABLE_NAME = (
-                                    CASE
-                                        WHEN @minimo = 0 THEN @Tabla
-                                        ELSE
-                                            (SELECT tablas FROM #relacionesT WHERE id = @minimo)
-                                    END
-                                ) AND principal.CONSTRAINT_NAME LIKE '%FK%';
-
-                                SET @minimo += 1;
-                            END
-
-                            SELECT 'resultadoFinal';
-                        END
+                        FROM #relacionesT2
                     END
+
+                    IF @minimo = @maximo BEGIN
+                        DELETE FROM #tablaT where id > 0;
+                        INSERT INTO #tablaT
+                        SELECT tablas FROM #TTemporal WHERE #TTemporal.tablas != 'sin_tabla';
+                    END
+
+                    DROP TABLE #relacionesT2;
+                    SET @minimo += 1;
                 END
-                ELSE IF @Tipo = 'crear' BEGIN
-                    -- vamos a crear a continuacion
-                    select 'ok';
+                SET @tMinimo += 1;
+                -- establecemos nuevamente valores para nuestros minimos y maximos.
+                IF EXISTS(SELECT * FROM #tablaT) BEGIN
+                    SET @tMinimo  = (SELECT TOP 1 id FROM #tablaT); SET @tMaximo = (SELECT TOP 1 id FROM #tablaT ORDER BY id DESC);
                 END
-                ELSE IF @Tipo = 'actualizar' BEGIN
-                    -- vamos a actualizar a continuacion...
-                    select 'ok';
-                END
-                ELSE IF @Tipo = 'eliminar' BEGIN
-                    -- vamos a eliminar a continuacion...
-                    select 'ok';
-                END
-                ELSE BEGIN
-                    SELECT 'opcion_incorrecto';
-                END
-            END
-        END TRY
-        BEGIN CATCH
-            SELECT 'error', ERROR_MESSAGE();
-        END CATCH
-    END
+            END --while
+
+            DROP TABLE #relacionesT;
+        END -- FI
+
+    END TRY
+    BEGIN CATCH
+        SELECT 'error', ERROR_MESSAGE();
+    END CATCH
+END
 
 EXEC Proc_CrudTablas @Tabla = 'Reserva', @Tipo = 'listar';
 
-SELECT * FROM usuario;
+
+GO
+
+USE SQLDB_CONCESIONARIA;
 
 GO
 
