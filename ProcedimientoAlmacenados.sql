@@ -2,7 +2,8 @@ CREATE OR ALTER PROCEDURE Proc_CrudTablas
     @Tabla NVARCHAR(MAX),
     @Tipo NVARCHAR(MAX),
     @Campocondicional NVARCHAR(MAX) = 'vacio',
-    @Valorcondicional NVARCHAR(MAX) = 'vacio'
+    @Valorcondicional NVARCHAR(MAX) = 'vacio',
+    @Salida NVARCHAR(MAX) OUTPUT
 AS
 BEGIN
     BEGIN TRY
@@ -120,16 +121,18 @@ BEGIN
             END --while
 
             IF @Campocondicional != 'vacio' AND @Valorcondicional != 'vacio' BEGIN
-                SET @CMD += ' WHERE ' + @Campocondicional + ' = ' + @Valorcondicional;
+                SET @CMD += ' WHERE ';
+                SET @CMD += dbo.FuncionVal(@Valorcondicional, @Campocondicional);
             END
 
             EXECUTE(@CMD);
+            
         END -- FI
 
         ELSE IF @Tipo = 'crear' BEGIN
 
+            -- hacer una comprobacion primero.
             SET @CMD = 'INSERT INTO ' + @Tabla + '(';
-
             SELECT
                 @CMD += (
                     CASE
@@ -138,8 +141,8 @@ BEGIN
                             FROM INFORMATION_SCHEMA.COLUMNS
                             WHERE TABLE_NAME = @Tabla
                             ORDER BY ORDINAL_POSITION DESC
-                        ) != relacion1.ORDINAL_POSITION THEN relacion1.COLUMN_NAME + ','
-                        ELSE relacion1.COLUMN_NAME + ') VALUES('
+                        ) != relacion1.ORDINAL_POSITION THEN relacion1.COLUMN_NAME + ', '
+                        ELSE relacion1.COLUMN_NAME + ') VALUES(' + dbo.FuncionVal(@Valorcondicional, '') + ')'
                     END
                 )
             FROM INFORMATION_SCHEMA.COLUMNS AS relacion1
@@ -149,22 +152,8 @@ BEGIN
                 WHERE relacion2.TABLE_NAME = @Tabla AND relacion2.CONSTRAINT_NAME LIKE '%PK%'
             );
 
---             DECLARE @SQL NVARCHAR(MAX) = N'INSERT INTO ' + @Tabla + '(' + @Esquema + ')' + ' VALUES(';
---             DECLARE @VALUES NVARCHAR(MAX) = dbo.FuncionString(@NumeroCampos, @Esquema, @Registros, 'crear');
---             SET @SQL += @VALUES + ')';
---
---             EXECUTE( @SQL );
---
---             DECLARE @resultadoTexto NVARCHAR(MAX) = '';
---             EXECUTE ListarPTabla @Tabla = @TablaEntrada, @nRelaciones = @NumeroCampos, @campo=@Esquema, @valor=@Registros, @resultadoSalida = @resultadoTexto OUTPUT;
---
---             IF @resultadoTexto != 'error' AND @resultadoTexto != 'sin_coincidencia' BEGIN
---                 SELECT 'ok';
---             END
---             ELSE BEGIN
---                 SELECT 'error';
---             END
-            SELECT @CMD;
+            -- EXECUTE(@CMD);
+            SELECT 'ok';
         END
 
     END TRY
@@ -174,12 +163,17 @@ BEGIN
 END
 
 EXEC Proc_CrudTablas
-                    @Tabla = 'Compra',
-                    @Tipo = 'crear',
-                    @Campocondicional = 'compra_id',
-                    @Valorcondicional = '1';
+                    @Tabla = 'Usuario',
+                    @Tipo = 'listar',
+                    @Valorcondicional = 'tayron, cancerbero, 1293458987, 0983458998, cancer@hotmail.com, JIOF-009-JFIO';
 
+EXEC Proc_CrudTablas
+                    @Tabla = 'Usuario',
+                    @Tipo = 'listar',
+                    @Campocondicional = 'usuario_id, cedula',
+                    @Valorcondicional = '1, 1754090106';
 
+DELETE FROM usuario where usuario_id = 68;
 
 GO
 
@@ -600,6 +594,43 @@ END
 GO
 
 EXECUTE ListarPTabla @Tabla = 'reserva';
+
+GO
+
+CREATE OR ALTER FUNCTION FuncionVal(@valor NVARCHAR(MAX), @campos NVARCHAR(MAX) = '')
+    RETURNS NVARCHAR(MAX)
+AS
+BEGIN
+    DECLARE @data NVARCHAR(MAX) = '';
+    DECLARE @exit INT = 1;
+
+    WHILE @exit = 1 BEGIN
+        DECLARE @longitudCaracter INT = CHARINDEX(',', @valor, 0);
+        DECLARE @longitudCaracterCampo INT = CHARINDEX(',', @campos, 0);
+
+        IF @longitudCaracter > 0 AND @longitudCaracterCampo = 0 BEGIN
+            SET @data += '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''' + ', '
+            SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
+        END
+        ELSE IF @longitudCaracter > 0 AND @longitudCaracterCampo > 0 BEGIN
+            SET @data +=  SUBSTRING(@campos, 0, @longitudCaracterCampo) + ' = ' + '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''' + ', ';
+
+            SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
+            SET @campos = TRIM(STUFF(@campos, 1, @longitudCaracterCampo, ''));
+        END
+        ELSE IF @longitudCaracter = 0 AND @campos != '' AND @longitudCaracterCampo = 0 BEGIN
+            SET @data += @campos + ' = ' + '''' + @valor + ''''
+            SET @exit = 0;
+        END
+        ELSE IF @longitudCaracter = 0 AND @campos = '' BEGIN
+            SET @data +=  '''' + @valor + '''';
+            SET @exit = 0;
+        END
+    END
+    RETURN @data;
+END
+
+
 
 GO
 
