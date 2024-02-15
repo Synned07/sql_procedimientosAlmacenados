@@ -1,6 +1,8 @@
 CREATE OR ALTER PROCEDURE Proc_CrudTablas
     @Tabla NVARCHAR(MAX),
-    @Tipo NVARCHAR(MAX)
+    @Tipo NVARCHAR(MAX),
+    @Campocondicional NVARCHAR(MAX) = 'vacio',
+    @Valorcondicional NVARCHAR(MAX) = 'vacio'
 AS
 BEGIN
     BEGIN TRY
@@ -117,8 +119,53 @@ BEGIN
                 END
             END --while
 
+            IF @Campocondicional != 'vacio' AND @Valorcondicional != 'vacio' BEGIN
+                SET @CMD += ' WHERE ' + @Campocondicional + ' = ' + @Valorcondicional;
+            END
+
             EXECUTE(@CMD);
         END -- FI
+
+        ELSE IF @Tipo = 'crear' BEGIN
+
+            SET @CMD = 'INSERT INTO ' + @Tabla + '(';
+
+            SELECT
+                @CMD += (
+                    CASE
+                        WHEN (
+                            SELECT TOP 1 ORDINAL_POSITION
+                            FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = @Tabla
+                            ORDER BY ORDINAL_POSITION DESC
+                        ) != relacion1.ORDINAL_POSITION THEN relacion1.COLUMN_NAME + ','
+                        ELSE relacion1.COLUMN_NAME + ') VALUES('
+                    END
+                )
+            FROM INFORMATION_SCHEMA.COLUMNS AS relacion1
+            WHERE relacion1.TABLE_NAME = @Tabla AND relacion1.COLUMN_NAME != (
+                SELECT relacion2.COLUMN_NAME
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS relacion2
+                WHERE relacion2.TABLE_NAME = @Tabla AND relacion2.CONSTRAINT_NAME LIKE '%PK%'
+            );
+
+--             DECLARE @SQL NVARCHAR(MAX) = N'INSERT INTO ' + @Tabla + '(' + @Esquema + ')' + ' VALUES(';
+--             DECLARE @VALUES NVARCHAR(MAX) = dbo.FuncionString(@NumeroCampos, @Esquema, @Registros, 'crear');
+--             SET @SQL += @VALUES + ')';
+--
+--             EXECUTE( @SQL );
+--
+--             DECLARE @resultadoTexto NVARCHAR(MAX) = '';
+--             EXECUTE ListarPTabla @Tabla = @TablaEntrada, @nRelaciones = @NumeroCampos, @campo=@Esquema, @valor=@Registros, @resultadoSalida = @resultadoTexto OUTPUT;
+--
+--             IF @resultadoTexto != 'error' AND @resultadoTexto != 'sin_coincidencia' BEGIN
+--                 SELECT 'ok';
+--             END
+--             ELSE BEGIN
+--                 SELECT 'error';
+--             END
+            SELECT @CMD;
+        END
 
     END TRY
     BEGIN CATCH
@@ -126,7 +173,12 @@ BEGIN
     END CATCH
 END
 
-EXEC Proc_CrudTablas @Tabla = 'Compra', @Tipo = 'listar';
+EXEC Proc_CrudTablas
+                    @Tabla = 'Compra',
+                    @Tipo = 'crear',
+                    @Campocondicional = 'compra_id',
+                    @Valorcondicional = '1';
+
 
 
 GO
@@ -134,8 +186,6 @@ GO
 USE SQLDB_CONCESIONARIA;
 
 GO
-
-/*
 
 CREATE TYPE tablaVerificar AS TABLE (
 	Tabla NVARCHAR(MAX) NOT NULL,
@@ -241,8 +291,7 @@ BEGIN
 		END 
 		ELSE BEGIN 
 			SELECT 'error';
-		END 
-
+		END
 	END TRY
 	BEGIN CATCH
 		SELECT 'error', ERROR_MESSAGE();
@@ -555,7 +604,7 @@ EXECUTE ListarPTabla @Tabla = 'reserva';
 GO
 
 -- funcion con valores de tabla
-ALTER FUNCTION FuncionString(@NColumnas INT, @Columnas NVARCHAR(MAX), @Columnas2 NVARCHAR(MAX), @Tipo NVARCHAR(50)) 
+CREATE OR ALTER FUNCTION FuncionString(@NColumnas INT, @Columnas NVARCHAR(MAX), @Columnas2 NVARCHAR(MAX), @Tipo NVARCHAR(50))
 	RETURNS NVARCHAR(MAX)
 AS
 BEGIN
