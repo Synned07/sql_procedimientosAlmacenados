@@ -15,6 +15,7 @@ BEGIN
             INSERT INTO #tablaT SELECT @Tabla;
             DECLARE @tMinimo INT = (SELECT TOP 1 id FROM #tablaT), @tMaximo INT = (SELECT TOP 1 id FROM #tablaT ORDER BY id DESC);
 
+            CREATE TABLE #TTemporal (id INT IDENTITY , tablas NVARCHAR(MAX));
             WHILE @tMinimo <= @tMaximo BEGIN
                 -- tiene otras relaciones.
                 CREATE TABLE #relacionesT (id INT IDENTITY(1,1), tablas NVARCHAR(MAX));
@@ -26,7 +27,6 @@ BEGIN
                 DECLARE @minimo INT = (SELECT TOP 1 id FROM #relacionesT);
                 DECLARE @maximo INT = (SELECT TOP 1 id FROM #relacionesT ORDER BY id DESC);
 
-                CREATE TABLE #TTemporal (id INT IDENTITY , tablas NVARCHAR(MAX));
                 WHILE @minimo <= @maximo BEGIN
                     DECLARE @TablaRelacion NVARCHAR(MAX);
 
@@ -88,24 +88,36 @@ BEGIN
                             END
                         FROM #relacionesT2
                     END
-
-                    IF @minimo = @maximo BEGIN
-                        DELETE FROM #tablaT where id > 0;
-                        INSERT INTO #tablaT
-                        SELECT tablas FROM #TTemporal WHERE #TTemporal.tablas != 'sin_tabla';
-                    END
-
                     DROP TABLE #relacionesT2;
                     SET @minimo += 1;
                 END
-                SET @tMinimo += 1;
-                -- establecemos nuevamente valores para nuestros minimos y maximos.
-                IF EXISTS(SELECT * FROM #tablaT) BEGIN
-                    SET @tMinimo  = (SELECT TOP 1 id FROM #tablaT); SET @tMaximo = (SELECT TOP 1 id FROM #tablaT ORDER BY id DESC);
+
+                IF @tMinimo = @tMaximo BEGIN
+                    DELETE FROM #tablaT where id > 0;
+
+                    IF (SELECT COUNT(*) FROM #TTemporal WHERE #TTemporal.tablas != 'sin_tabla') != 0 BEGIN
+                        INSERT INTO #tablaT
+                        SELECT tablas FROM #TTemporal WHERE #TTemporal.tablas != 'sin_tabla';
+
+                        DELETE FROM #TTemporal where id > 0;
+                    END
+                    -- establecemos nuevamente valores para nuestros minimos y maximos.
+                    IF (SELECT COUNT(*) FROM #tablaT) != 0 BEGIN
+                        SET @tMinimo = (SELECT TOP 1 id FROM #tablaT);
+                        SET @tMaximo = (SELECT TOP 1 id FROM #tablaT ORDER BY id DESC);
+
+                        DROP TABLE #relacionesT;
+                    END
+                    ELSE BEGIN
+                        SET @tMinimo += 1;
+                    END
+                END
+                ELSE BEGIN
+                    SET @tMinimo += 1;
                 END
             END --while
 
-            DROP TABLE #relacionesT;
+            EXECUTE(@CMD);
         END -- FI
 
     END TRY
@@ -114,7 +126,7 @@ BEGIN
     END CATCH
 END
 
-EXEC Proc_CrudTablas @Tabla = 'Reserva', @Tipo = 'listar';
+EXEC Proc_CrudTablas @Tabla = 'Compra', @Tipo = 'listar';
 
 
 GO
@@ -123,6 +135,7 @@ USE SQLDB_CONCESIONARIA;
 
 GO
 
+/*
 
 CREATE TYPE tablaVerificar AS TABLE (
 	Tabla NVARCHAR(MAX) NOT NULL,
