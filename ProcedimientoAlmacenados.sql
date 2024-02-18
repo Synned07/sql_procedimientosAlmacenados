@@ -3,7 +3,8 @@ CREATE OR ALTER PROCEDURE Proc_CrudTablas
     @Tipo NVARCHAR(MAX),
     @Campocondicional NVARCHAR(MAX) = 'vacio',
     @Valorcondicional NVARCHAR(MAX) = 'vacio',
-    @Salida NVARCHAR(MAX) OUTPUT
+    @Operador NVARCHAR(MAX) = 'vacio',
+    @Flag BIT = 0
 AS
 BEGIN
     BEGIN TRY
@@ -13,6 +14,11 @@ BEGIN
         IF @Tipo = 'listar'
         BEGIN
             SET @CMD = ' SELECT * FROM ' + @Tabla;
+
+            IF @Flag = 1 BEGIN
+                SET @CMD = ' SELECT COUNT(*) FROM ' + @Tabla;
+            END
+
             -- si tiene otras relaciones esta consulta las va construyendo...
             CREATE TABLE #tablaT (id INT IDENTITY(1,1), tablas NVARCHAR(MAX));
             INSERT INTO #tablaT SELECT @Tabla;
@@ -120,18 +126,15 @@ BEGIN
                 END
             END --while
 
-            IF @Campocondicional != 'vacio' AND @Valorcondicional != 'vacio' BEGIN
+            IF @Campocondicional != 'vacio' AND @Valorcondicional != 'vacio' AND @Operador != 'vacio' BEGIN
                 SET @CMD += ' WHERE ';
-                SET @CMD += dbo.FuncionVal(@Valorcondicional, @Campocondicional);
+                SET @CMD += dbo.FuncionVal(@Valorcondicional, @Campocondicional, @Operador);
             END
 
             EXECUTE(@CMD);
-            
         END -- FI
 
         ELSE IF @Tipo = 'crear' BEGIN
-
-            -- hacer una comprobacion primero.
             SET @CMD = 'INSERT INTO ' + @Tabla + '(';
             SELECT
                 @CMD += (
@@ -142,7 +145,7 @@ BEGIN
                             WHERE TABLE_NAME = @Tabla
                             ORDER BY ORDINAL_POSITION DESC
                         ) != relacion1.ORDINAL_POSITION THEN relacion1.COLUMN_NAME + ', '
-                        ELSE relacion1.COLUMN_NAME + ') VALUES(' + dbo.FuncionVal(@Valorcondicional, '') + ')'
+                        ELSE relacion1.COLUMN_NAME + ') VALUES(' + dbo.FuncionVal(@Valorcondicional, '', 'none') + ')'
                     END
                 )
             FROM INFORMATION_SCHEMA.COLUMNS AS relacion1
@@ -151,29 +154,47 @@ BEGIN
                 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS relacion2
                 WHERE relacion2.TABLE_NAME = @Tabla AND relacion2.CONSTRAINT_NAME LIKE '%PK%'
             );
-
             -- EXECUTE(@CMD);
-            SELECT 'ok';
+            EXECUTE(@CMD);
         END
 
     END TRY
     BEGIN CATCH
-        SELECT 'error', ERROR_MESSAGE();
+        DECLARE @error INT = @@ERROR;
+
+        IF @error = 2627 BEGIN
+            SELECT @error AS codigoError, 'dato_ya_registrado' AS mensajeError;
+        END
+        ELSE BEGIN
+            SELECT ERROR_MESSAGE();
+        END
+
     END CATCH
 END
 
-EXEC Proc_CrudTablas
-                    @Tabla = 'Usuario',
-                    @Tipo = 'listar',
-                    @Valorcondicional = 'tayron, cancerbero, 1293458987, 0983458998, cancer@hotmail.com, JIOF-009-JFIO';
+
 
 EXEC Proc_CrudTablas
                     @Tabla = 'Usuario',
                     @Tipo = 'listar',
-                    @Campocondicional = 'usuario_id, cedula',
-                    @Valorcondicional = '1, 1754090106';
+                    @Campocondicional = 'usuario_id',
+                    @Valorcondicional = '1',
+                    @Operador = 'AND',
+                    @Flag = 0;
 
-DELETE FROM usuario where usuario_id = 68;
+EXEC Proc_CrudTablas
+                    @Tabla = 'usuario',
+                    @Tipo = 'listar';
+
+
+EXEC Proc_CrudTablas
+                    @Tabla = 'Usuario',
+                    @Tipo = 'crear',
+                    @Valorcondicional = 'tayron, cancerbero, 9901234567, 0983458998, cancer@hotmail.com, JIOF-009-JFIO';
+
+
+SELECT * FROM reserva;
+ALTER TABLE reserva ADD UNIQUE(reserva_compraId);
 
 GO
 
@@ -597,7 +618,7 @@ EXECUTE ListarPTabla @Tabla = 'reserva';
 
 GO
 
-CREATE OR ALTER FUNCTION FuncionVal(@valor NVARCHAR(MAX), @campos NVARCHAR(MAX) = '')
+CREATE OR ALTER FUNCTION FuncionVal(@valor NVARCHAR(MAX), @campos NVARCHAR(MAX) = '', @operador NVARCHAR(MAX) = 'none')
     RETURNS NVARCHAR(MAX)
 AS
 BEGIN
@@ -613,7 +634,14 @@ BEGIN
             SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
         END
         ELSE IF @longitudCaracter > 0 AND @longitudCaracterCampo > 0 BEGIN
-            SET @data +=  SUBSTRING(@campos, 0, @longitudCaracterCampo) + ' = ' + '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''' + ', ';
+            SET @data +=  SUBSTRING(@campos, 0, @longitudCaracterCampo) + ' = ' + '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''';
+
+            IF @operador = 'none' BEGIN
+                SET @data += ', ';
+            END
+            ELSE BEGIN
+                SET @data +=  + ' ' + @operador + ' ';
+            END
 
             SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
             SET @campos = TRIM(STUFF(@campos, 1, @longitudCaracterCampo, ''));
@@ -630,7 +658,8 @@ BEGIN
     RETURN @data;
 END
 
-
+DECLARE @respuesta NVARCHAR(MAX) = dbo.FuncionVal('campo1, campo2', 'valor1, valor2');
+SELECT @respuesta;
 
 GO
 
@@ -722,3 +751,9 @@ PRINT @result;
 GO
 
 USE SQLDB_CONCESIONARIA;
+
+-- paquetes.
+-- indices.
+
+-- sinonimos.
+
