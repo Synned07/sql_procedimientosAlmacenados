@@ -154,8 +154,14 @@ BEGIN
                 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS relacion2
                 WHERE relacion2.TABLE_NAME = @Tabla AND relacion2.CONSTRAINT_NAME LIKE '%PK%'
             );
-            -- EXECUTE(@CMD);
             EXECUTE(@CMD);
+
+            DECLARE @exec NVARCHAR(MAX) = 'SELECT TOP 1 * FROM ' + @Tabla;
+            SET @exec += ' ORDER BY ' + (
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = @Tabla AND CONSTRAINT_NAME LIKE '%PK%'
+            ) + ' DESC ';
+
+            EXECUTE(@exec);
         END
 
     END TRY
@@ -163,7 +169,7 @@ BEGIN
         DECLARE @error INT = @@ERROR;
 
         IF @error = 2627 BEGIN
-            SELECT @error AS codigoError, 'dato_ya_registrado' AS mensajeError;
+            SELECT 'dato_ya_registrado' AS mensajeError;
         END
         ELSE BEGIN
             SELECT ERROR_MESSAGE();
@@ -172,26 +178,41 @@ BEGIN
     END CATCH
 END
 
+DELETE FROM carroceria WHERE carroceria_id >= 30;
+SELECT * FROM carroceria;
+
+USE DB_PlantaAgua;
+
+GO
+
+-- EXEC Proc_CrudTablas
+--                     @Tabla = 'Reserva',
+--                     @Tipo = 'listar',
+--                     @Campocondicional = 'usuario_id',
+--                     @Valorcondicional = '2',
+--                     @Operador = 'AND',
+--                     @Flag = 0;
+--
+-- EXEC Proc_CrudTablas
+--                     @Tabla = 'Reserva',
+--                     @Tipo = 'listar';
 
 
 EXEC Proc_CrudTablas
-                    @Tabla = 'Usuario',
-                    @Tipo = 'listar',
-                    @Campocondicional = 'usuario_id',
-                    @Valorcondicional = '1',
-                    @Operador = 'AND',
-                    @Flag = 0;
-
-EXEC Proc_CrudTablas
-                    @Tabla = 'usuario',
-                    @Tipo = 'listar';
-
-
-EXEC Proc_CrudTablas
-                    @Tabla = 'Usuario',
+                    @Tabla = 'carroceria',
                     @Tipo = 'crear',
-                    @Valorcondicional = 'tayron, cancerbero, 9901234567, 0983458998, cancer@hotmail.com, JIOF-009-JFIO';
+                    @Valorcondicional = 'Todoterreno o 4x4';
 
+SELECT
+    relacion1.COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS AS relacion1
+WHERE relacion1.TABLE_NAME = 'marca' AND relacion1.COLUMN_NAME != (
+    SELECT relacion2.COLUMN_NAME
+    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS relacion2
+    WHERE relacion2.TABLE_NAME = 'marca' AND relacion2.CONSTRAINT_NAME LIKE '%PK%'
+);
+
+/*
 
 SELECT * FROM reserva;
 ALTER TABLE reserva ADD UNIQUE(reserva_compraId);
