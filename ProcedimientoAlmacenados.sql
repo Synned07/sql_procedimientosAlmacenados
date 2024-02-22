@@ -4,7 +4,9 @@ CREATE OR ALTER PROCEDURE Proc_CrudTablas
     @Campocondicional NVARCHAR(MAX) = 'vacio',
     @Valorcondicional NVARCHAR(MAX) = 'vacio',
     @Operador NVARCHAR(MAX) = 'vacio',
-    @Flag BIT = 0
+    @Flag BIT = 0,
+    @CamposVal NVARCHAR(MAX) = 'vacio',
+    @ValorVal NVARCHAR(MAX) = 'vacio'
 AS
 BEGIN
     BEGIN TRY
@@ -135,6 +137,7 @@ BEGIN
         END -- FI
 
         ELSE IF @Tipo = 'crear' BEGIN
+
             SET @CMD = 'INSERT INTO ' + @Tabla + '(';
             SELECT
                 @CMD += (
@@ -164,6 +167,27 @@ BEGIN
             EXECUTE(@exec);
         END
 
+        ELSE IF @Tipo = 'eliminar' BEGIN
+
+            SET @CMD = 'DELETE FROM';
+            SET @CMD += ' ' + @Tabla;
+            SET @CMD += ' ' + 'WHERE';
+            SET @CMD += ' ' + @Campocondicional;
+            SET @CMD += ' = ' + @Valorcondicional;
+
+            EXECUTE(@CMD);
+        END
+
+        ELSE IF @Tipo = 'actualizar'
+        BEGIN
+            SET @CMD = N'UPDATE ' + @Tabla + ' SET ';
+            SET @CMD += dbo.FuncionVal( @ValorVal , @CamposVal, 'none');
+            SET @CMD += ' WHERE ';
+            SET @CMD += dbo.FuncionVal(@Valorcondicional, @Campocondicional, 'AND');
+
+            EXECUTE(@CMD);
+        END
+
     END TRY
     BEGIN CATCH
         DECLARE @error INT = @@ERROR;
@@ -174,51 +198,67 @@ BEGIN
         ELSE BEGIN
             SELECT ERROR_MESSAGE();
         END
-
     END CATCH
 END
 
-DELETE FROM carroceria WHERE carroceria_id >= 30;
-SELECT * FROM carroceria;
+GO
 
-USE DB_PlantaAgua;
+EXECUTE Proc_CrudTablas
+    @Tabla = 'usuario',
+    @Tipo = 'actualizar',
+    @CamposVal = 'usuario_nombre, usuario_apellido, usuario_cedula, usuario_celular, usuario_correo, usuario_contrasena',
+    @ValorVal = 'Hugo, Gomez, 9901234567, 1111111111, hugo_gomez@example.com, 5A55E369-8513-4',
+    @Campocondicional = 'usuario_id',
+    @Valorcondicional = '21';
 
 GO
 
--- EXEC Proc_CrudTablas
---                     @Tabla = 'Reserva',
---                     @Tipo = 'listar',
---                     @Campocondicional = 'usuario_id',
---                     @Valorcondicional = '2',
---                     @Operador = 'AND',
---                     @Flag = 0;
---
--- EXEC Proc_CrudTablas
---                     @Tabla = 'Reserva',
---                     @Tipo = 'listar';
+SELECT * FROM Carroceria;
 
+CREATE OR ALTER FUNCTION FuncionVal(@valor NVARCHAR(MAX), @campos NVARCHAR(MAX) = '', @operador NVARCHAR(MAX) = 'none')
+    RETURNS NVARCHAR(MAX)
+AS
+BEGIN
+    DECLARE @data NVARCHAR(MAX) = '';
+    DECLARE @exit INT = 1;
 
-EXEC Proc_CrudTablas
-                    @Tabla = 'carroceria',
-                    @Tipo = 'crear',
-                    @Valorcondicional = 'Todoterreno o 4x4';
+    WHILE @exit = 1 BEGIN
+        DECLARE @longitudCaracter INT = CHARINDEX(',', @valor, 0);
+        DECLARE @longitudCaracterCampo INT = CHARINDEX(',', @campos, 0);
 
-SELECT
-    relacion1.COLUMN_NAME
-FROM INFORMATION_SCHEMA.COLUMNS AS relacion1
-WHERE relacion1.TABLE_NAME = 'marca' AND relacion1.COLUMN_NAME != (
-    SELECT relacion2.COLUMN_NAME
-    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS relacion2
-    WHERE relacion2.TABLE_NAME = 'marca' AND relacion2.CONSTRAINT_NAME LIKE '%PK%'
-);
+        IF @longitudCaracter > 0 AND @longitudCaracterCampo = 0 BEGIN
+            SET @data += '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''' + ', '
+            SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
+        END
+        ELSE IF @longitudCaracter > 0 AND @longitudCaracterCampo > 0 BEGIN
+            SET @data +=  SUBSTRING(@campos, 0, @longitudCaracterCampo) + ' = ' + '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''';
+
+            IF @operador = 'none' BEGIN
+                SET @data += ', ';
+            END
+            ELSE BEGIN
+                SET @data +=  + ' ' + @operador + ' ';
+            END
+
+            SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
+            SET @campos = TRIM(STUFF(@campos, 1, @longitudCaracterCampo, ''));
+        END
+        ELSE IF @longitudCaracter = 0 AND @campos != '' AND @longitudCaracterCampo = 0 BEGIN
+            SET @data += @campos + ' = ' + '''' + @valor + ''''
+            SET @exit = 0;
+        END
+        ELSE IF @longitudCaracter = 0 AND @campos = '' BEGIN
+            SET @data +=  '''' + @valor + '''';
+            SET @exit = 0;
+        END
+    END
+    RETURN @data;
+END
+
+GO
+
 
 /*
-
-SELECT * FROM reserva;
-ALTER TABLE reserva ADD UNIQUE(reserva_compraId);
-
-GO
-
 USE SQLDB_CONCESIONARIA;
 
 GO
@@ -639,45 +679,7 @@ EXECUTE ListarPTabla @Tabla = 'reserva';
 
 GO
 
-CREATE OR ALTER FUNCTION FuncionVal(@valor NVARCHAR(MAX), @campos NVARCHAR(MAX) = '', @operador NVARCHAR(MAX) = 'none')
-    RETURNS NVARCHAR(MAX)
-AS
-BEGIN
-    DECLARE @data NVARCHAR(MAX) = '';
-    DECLARE @exit INT = 1;
 
-    WHILE @exit = 1 BEGIN
-        DECLARE @longitudCaracter INT = CHARINDEX(',', @valor, 0);
-        DECLARE @longitudCaracterCampo INT = CHARINDEX(',', @campos, 0);
-
-        IF @longitudCaracter > 0 AND @longitudCaracterCampo = 0 BEGIN
-            SET @data += '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''' + ', '
-            SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
-        END
-        ELSE IF @longitudCaracter > 0 AND @longitudCaracterCampo > 0 BEGIN
-            SET @data +=  SUBSTRING(@campos, 0, @longitudCaracterCampo) + ' = ' + '''' + SUBSTRING(@valor, 0, @longitudCaracter) + '''';
-
-            IF @operador = 'none' BEGIN
-                SET @data += ', ';
-            END
-            ELSE BEGIN
-                SET @data +=  + ' ' + @operador + ' ';
-            END
-
-            SET @valor = TRIM(STUFF(@valor, 1, @longitudCaracter, ''));
-            SET @campos = TRIM(STUFF(@campos, 1, @longitudCaracterCampo, ''));
-        END
-        ELSE IF @longitudCaracter = 0 AND @campos != '' AND @longitudCaracterCampo = 0 BEGIN
-            SET @data += @campos + ' = ' + '''' + @valor + ''''
-            SET @exit = 0;
-        END
-        ELSE IF @longitudCaracter = 0 AND @campos = '' BEGIN
-            SET @data +=  '''' + @valor + '''';
-            SET @exit = 0;
-        END
-    END
-    RETURN @data;
-END
 
 DECLARE @respuesta NVARCHAR(MAX) = dbo.FuncionVal('campo1, campo2', 'valor1, valor2');
 SELECT @respuesta;
