@@ -211,9 +211,14 @@ EXECUTE Proc_CrudTablas
     @Campocondicional = 'usuario_id',
     @Valorcondicional = '21';
 
+EXECUTE Proc_CrudTablas
+    @Tabla = 'usuarioPerfil',
+    @Tipo = 'listar',
+    @Campocondicional = 'usuario_correo, usuario_contrasena',
+    @Valorcondicional = 'juan_gomez@example.com, A289424F-2958-4',
+    @Operador = 'AND';
+
 GO
-
-
 
 CREATE OR ALTER FUNCTION FuncionVal(@valor NVARCHAR(MAX), @campos NVARCHAR(MAX) = '', @operador NVARCHAR(MAX) = 'none')
     RETURNS NVARCHAR(MAX)
@@ -257,27 +262,7 @@ END
 
 GO
 
-CREATE OR ALTER PROCEDURE ModuloSeguridad
-	@Email NVARCHAR(MAX),
-	@Passwd NVARCHAR(MAX)
-AS
-BEGIN
-	BEGIN TRY
-		DECLARE @valores NVARCHAR(MAX) = CONCAT('(', @Email, '),', '(', @Passwd, ')')
-		DECLARE @resultado NVARCHAR(MAX);
-		EXECUTE ListarPTabla @Tabla = 'usuarioPerfil', @nRelaciones = 2, @campo = 'usuario_correo, usuario_contrasena', @valor = @valores, @resultadoSalida = @resultado OUTPUT;
 
-		IF @resultado = 'sin_coincidencia' BEGIN
-			SELECT 'credenciales_incorrectas';
-		END
-
-	END TRY
-	BEGIN CATCH
-		SELECT 'error';
-	END CATCH
-END
-
-GO
 /*
 USE SQLDB_CONCESIONARIA;
 
