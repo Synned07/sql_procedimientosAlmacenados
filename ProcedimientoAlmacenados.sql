@@ -262,7 +262,7 @@ END
 
 GO
 
-
+SELECT * FROM usuario;
 /*
 USE SQLDB_CONCESIONARIA;
 
